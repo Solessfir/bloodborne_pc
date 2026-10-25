@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 IFreemz (shadps4_dlss bridge), bbport contributors
 // SPDX-License-Identifier: MIT
 //
-// bbport_dlss.dll: the only part of the project that uses the NVIDIA DLSS (NGX) SDK. Built with
-// MSVC (the SDK's libraries are MSVC only); the port loads it at run time.
+// The only part of the project that uses the NVIDIA DLSS (NGX) SDK; loaded at run time.
 // Adapted from IFreemz/shadPS4-Bloodborne-DLSS-FSR (dlss_bridge).
 
 #include <algorithm>
@@ -19,12 +18,18 @@
 #include <nvsdk_ngx_helpers.h>
 #include <nvsdk_ngx_vk.h>
 #include <nvsdk_ngx_helpers_vk.h>
+#ifdef _WIN32
 #include <nvsdk_ngx_helpers_dlssg_vk.h>
+#endif
 
 namespace {
 
 constexpr char ProjectId[] = "42359704-c9f3-4806-9fb5-d469000fdb8a";
+#ifdef _WIN32
 constexpr char EngineVersion[] = "bbport-windows";
+#else
+constexpr char EngineVersion[] = "bbport-linux";
+#endif
 
 struct State {
     BbDlssLogFn log{};
@@ -33,17 +38,21 @@ struct State {
     const wchar_t* dll_path{};
     NVSDK_NGX_FeatureCommonInfo common{};
     NVSDK_NGX_FeatureDiscoveryInfo discovery{};
+#ifdef _WIN32
     NVSDK_NGX_FeatureDiscoveryInfo discovery_fg{}; // Frame Generation
+#endif
     NVSDK_NGX_Parameter* capabilities{};
     NVSDK_NGX_Parameter* parameters{};
     NVSDK_NGX_Handle* feature{};
     BbDlssFeature feature_desc{};
+#ifdef _WIN32
     // Frame Generation: its own parameter map (NVIDIA's advice with two features).
     NVSDK_NGX_Parameter* fg_parameters{};
     NVSDK_NGX_Handle* fg_feature{};
     BbDlssgFeature fg_desc{};
     bool fg_device_supported{};
     int32_t fg_max_count{};
+#endif
     // Extensions of both features, without duplicates.
     std::vector<VkExtensionProperties> instance_extensions, device_extensions;
     VkDevice device{};
@@ -86,8 +95,10 @@ int32_t Configure(const wchar_t* dll_directory, const wchar_t* data_directory, B
                                                 EngineVersion};
     state.discovery.ApplicationDataPath = state.data_directory.c_str();
     state.discovery.FeatureInfo = &state.common;
+#ifdef _WIN32
     state.discovery_fg = state.discovery;
     state.discovery_fg.FeatureID = NVSDK_NGX_Feature_FrameGeneration;
+#endif
     state.configured = true;
     return 1;
 }
@@ -116,10 +127,12 @@ int32_t InstanceExtensions(uint32_t* count, const VkExtensionProperties** extens
         return 0;
     state.instance_extensions.clear();
     Merge(state.instance_extensions, required, required_count);
+#ifdef _WIN32
     // Frame Generation's own needs; without them only DLSS is offered.
     if (NVSDK_NGX_SUCCEED(NVSDK_NGX_VULKAN_GetFeatureInstanceExtensionRequirements(
             &state.discovery_fg, &required_count, &required)))
         Merge(state.instance_extensions, required, required_count);
+#endif
     *count = uint32_t(state.instance_extensions.size());
     *extensions = state.instance_extensions.data();
     return 1;
@@ -147,6 +160,7 @@ int32_t DeviceExtensions(VkInstance instance, VkPhysicalDevice physical, uint32_
         return 0;
     state.device_extensions.clear();
     Merge(state.device_extensions, required, required_count);
+#ifdef _WIN32
     NVSDK_NGX_FeatureRequirement fg_support{};
     state.fg_device_supported =
         NVSDK_NGX_SUCCEED(NVSDK_NGX_VULKAN_GetFeatureRequirements(instance, physical,
@@ -161,6 +175,7 @@ int32_t DeviceExtensions(VkInstance instance, VkPhysicalDevice physical, uint32_
         Log(0, "Frame Generation is not supported on this GPU or driver (code 0x%x)",
             static_cast<unsigned>(fg_support.FeatureSupported));
     }
+#endif
     *count = uint32_t(state.device_extensions.size());
     *extensions = state.device_extensions.data();
     return 1;
@@ -194,6 +209,7 @@ int32_t Initialize(VkInstance instance, VkPhysicalDevice physical, VkDevice devi
         Log(1, "DLSS Super Resolution is not available on this system");
         return 0;
     }
+#ifdef _WIN32
     int fg_available{}, fg_needs_driver{};
     unsigned fg_max{};
     NVSDK_NGX_Parameter_GetI(state.capabilities, NVSDK_NGX_Parameter_FrameGeneration_Available,
@@ -210,6 +226,7 @@ int32_t Initialize(VkInstance instance, VkPhysicalDevice physical, VkDevice devi
     } else if (fg_needs_driver) {
         Log(1, "Frame Generation needs a newer NVIDIA driver");
     }
+#endif
     return 1;
 }
 
@@ -298,6 +315,7 @@ int32_t Evaluate(VkCommandBuffer command, const BbDlssEvaluate* evaluate) {
                : 0;
 }
 
+#ifdef _WIN32
 int32_t FrameGenMaxCount() {
     return state.initialized ? state.fg_max_count : 0;
 }
@@ -435,6 +453,23 @@ int32_t FrameGenEvaluate(VkCommandBuffer command, const BbDlssgEvaluate* evaluat
                : 0;
 }
 
+#else
+// Frame Generation is enabled only in the Windows bridge.
+int32_t FrameGenMaxCount() {
+    return 0;
+}
+
+void FrameGenRelease() {}
+
+int32_t FrameGenCreate(VkCommandBuffer, const BbDlssgFeature*) {
+    return 0;
+}
+
+int32_t FrameGenEvaluate(VkCommandBuffer, const BbDlssgEvaluate*) {
+    return 0;
+}
+#endif
+
 void Shutdown() {
     FrameGenRelease();
     ReleaseFeature();
@@ -456,6 +491,12 @@ const BbDlssApi api{BBPORT_DLSS_BRIDGE_ABI, Configure,        InstanceExtensions
 
 } // namespace
 
-extern "C" __declspec(dllexport) const BbDlssApi* BbDlssGetApi() {
+#ifdef _WIN32
+#define BBPORT_DLSS_EXPORT __declspec(dllexport)
+#else
+#define BBPORT_DLSS_EXPORT __attribute__((visibility("default")))
+#endif
+
+extern "C" BBPORT_DLSS_EXPORT const BbDlssApi* BbDlssGetApi() {
     return &api;
 }

@@ -713,7 +713,7 @@ def main():
     hud_layer = out / 'hud_layout'
     shutil.rmtree(hud_layer, ignore_errors=True)
     canvas = hud_canvas(output_size(read_settings(Path(config))))
-    if canvas != OUTPUT_SIZE and 'resolution' in groups:
+    if canvas[0] > OUTPUT_SIZE[0] and 'resolution' in groups:
         position = ini_value(config, 'hud_position') or '100'
         if not run_script('hud_layout.py', game, '--out', hud_layer, '--canvas-width', canvas[0],
                           '--position', max(0, min(100, int(position) if position.isdigit() else 100)) / 100,
@@ -771,7 +771,7 @@ def main():
         patched = 'resolution' in groups
         # Sizes chosen below for the previous launch are recomputed after an in-game restart.
         if env.get('BB_AUTO_RENDER_RES') == '1':
-            for key in ('BB_RENDER_RES', 'BB_OUTPUT_RES', 'BB_AUTO_RENDER_RES'):
+            for key in ('BB_RENDER_RES', 'BB_OUTPUT_RES', 'BB_AUTO_RENDER_RES', 'BB_UI_RES'):
                 env.pop(key, None)
         fps = env.get('BB_FPS', 'uncap') if 'fps' in groups else '30'
         scaled_render = scaled_output = None
@@ -799,10 +799,10 @@ def main():
             if patched and canvas != OUTPUT_SIZE:
                 live = '0'
                 env['BB_UI_RES'] = f'{canvas[0]}x{canvas[1]}'
-                if hud_canvas(output) != OUTPUT_SIZE:
-                    print(f'Output {scaled_output}: ultrawide, HUD {env["BB_UI_RES"]}')
-                else:
+                if hud_canvas(output) != canvas:
                     print(f'Output {scaled_output}: Sharp UI, menus and HUD drawn at {env["BB_UI_RES"]}')
+                else:
+                    print(f'Output {scaled_output}: camera and HUD startup patch ({env["BB_UI_RES"]})')
         if live == '1' or not scaled_output:
             env.pop('BB_UI_RES', None)
         if live == '1':

@@ -26,8 +26,8 @@
 #include "fg401_support.h"
 #include "fsr411_support.h"
 #include "fsr411_vulkan_support.h"
-#include "video_core/renderer_vulkan/vk_low_latency.h"
 #endif
+#include "video_core/renderer_vulkan/vk_low_latency.h"
 
 namespace Vulkan {
 
@@ -209,6 +209,10 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
 }
 
 Instance::~Instance() {
+    if (Dlss* dlss = Dlss::Get(); device && dlss) {
+        (void)GetDevice().waitIdle();
+        dlss->Shutdown();
+    }
     ImGui::Core::Shutdown(GetDevice());
     vmaDestroyAllocator(allocator);
 }

@@ -29,6 +29,7 @@ PRESET_SCALES=[1.0,1.5,1.7,2.0,3.0]
 # and the UI movie viewport. Keep the latter at native size so glyph rasterisation and
 # vector tessellation do not inherit the scene's FSR resolution.
 RESOLUTION_TEMPLATE='Resolution Patch 1280x720 (16:9)'
+RESOLUTION_16_10_TEMPLATE='Resolution Patch 1280x800 (16:10)'
 # Outputs wider than 16:9: Kyo's 21:9 patch widens the camera's aspect ratio, the HUD canvas
 # (1080 high, wider), the HUD projection and the screen-to-HUD mapping of the lock-on and HP-bar
 # markers; ultrawide_writes recomputes those values for the output's own aspect ratio.
@@ -176,11 +177,11 @@ def output_size(settings):
 def scaled_sizes(settings):
     """(render, output) for an output other than 1080p (above it, or 720p for the Steam Deck):
     the game renders at output / preset scale (or at the output size without upscaler) and the
-    upscaler fills the output. None at 1080p and for TAA (native, live host targets only)."""
+    upscaler fills the output. None at 1080p and for TAA except 16:10, which needs its HUD patch."""
     out=output_size(settings)
-    if out==OUTPUT_SIZE or settings.get('upscaler')=='taa': return None
+    if out==OUTPUT_SIZE or (settings.get('upscaler')=='taa' and out[0]*10!=out[1]*16): return None
     scale=1.0
-    if settings.get('upscaler','fsr3')!='off':
+    if settings.get('upscaler','fsr3') not in ('off','taa'):
         preset=int(settings.get('preset','0') or 0)
         scale=PRESET_SCALES[max(0,min(preset,len(PRESET_SCALES)-1))]
     render=tuple(max(2,round(v/scale/2)*2) for v in out)
@@ -195,11 +196,14 @@ def scaled_sizes(settings):
 
 
 def resolution_writes(xml,size,app_version,segments,ui=OUTPUT_SIZE):
-    writes=compile_patches(xml,[RESOLUTION_TEMPLATE],app_version,segments)
-    replacements={SCENE_WIDTH:(0xB8,0x500,size[0]),
-                  SCENE_HEIGHT:(0xB8,0x2D0,size[1]),
-                  UI_WIDTH:(0xB8,0x500,ui[0]),
-                  UI_HEIGHT:(0xB9,0x2D0,ui[1])}
+    tall=ui[0]*10==ui[1]*16
+    template=RESOLUTION_16_10_TEMPLATE if tall else RESOLUTION_TEMPLATE
+    old_height=800 if tall else 720
+    writes=compile_patches(xml,[template],app_version,segments)
+    replacements={SCENE_WIDTH:(0xB8,1280,size[0]),
+                  SCENE_HEIGHT:(0xB8,old_height,size[1]),
+                  UI_WIDTH:(0xB8,1280,ui[0]),
+                  UI_HEIGHT:(0xB9,old_height,ui[1])}
     out=[]
     seen=set()
     for offset,data in writes:
@@ -216,10 +220,11 @@ def resolution_writes(xml,size,app_version,segments,ui=OUTPUT_SIZE):
 
 
 def hud_canvas(output):
-    """The HUD's coordinate space for an output: 1920x1080 up to 16:9, wider (still 1080 high,
-    even width) for ultrawide outputs, e.g. 2580x1080 for 3440x1440. The port scales it to the
-    output uniformly (UiComposition, BB_UI_RES)."""
+    """HUD coordinates: 1920x1200 for 16:10, 1920x1080 for 16:9 and other narrower outputs,
+    wider (1080 high, even width) for ultrawide. The port scales this canvas to the output
+    uniformly (UiComposition, BB_UI_RES)."""
     w,h=output
+    if w*10==h*16: return (1920,1200)
     if w*OUTPUT_SIZE[1]<=h*OUTPUT_SIZE[0]: return OUTPUT_SIZE
     return (round(OUTPUT_SIZE[1]*w/h/2)*2,OUTPUT_SIZE[1])
 
@@ -303,7 +308,7 @@ HEAP_PATCH='Increased Graphics Heap Sizes'
 SHARES_FPS_CODE={'Enemy Control'}
 PATCH_GROUPS={
     'fps':sorted({n for names in FPS_PRESETS.values() for n in names}|SHARES_FPS_CODE),
-    'resolution':sorted({RESOLUTION_TEMPLATE,ULTRAWIDE_TEMPLATE,HEAP_PATCH}),
+    'resolution':sorted({RESOLUTION_TEMPLATE,RESOLUTION_16_10_TEMPLATE,ULTRAWIDE_TEMPLATE,HEAP_PATCH}),
     'effects':sorted(({n for pair in EFFECTS.values() for n in pair if n}|set(MODEL_LOD.values()))-SHARES_FPS_CODE),
 }
 GROUP_OF={name:group for group,names in PATCH_GROUPS.items() for name in names}
@@ -317,7 +322,7 @@ def group_list(groups):
 FINGERPRINT_PATCHES=sorted({n for names in FPS_PRESETS.values() for n in names}|{RESOLUTION_TEMPLATE})
 PATCH_FINGERPRINTS={'01.09':{
     'fps':'6a0f9b8e586dfb9e8cbfe15a852b72d07404589a4728497ebee5568f01bb1197',
-    'resolution':'47357d5f72288b628769eb3f7b7a77b6cc60b29acfd215c9e259a6940c9d77f4',
+    'resolution':'ed1709fee3b2835f84e730ee44a17a297056994650f92082ce40cf922ec53c7c',
     'effects':'49fbe0e9fddc3d02edc4b121f4f0b5a9a79705cb802460b7cf2d4d406771d70b',
 }}
 
@@ -498,7 +503,7 @@ def main():
     p.add_argument('--game-dir',type=Path,default=Path(os.environ.get('BB_GAME_DIR','../CUSA03173')))
     p.add_argument('--render-res',default='',help='render resolution WxH (overrides the preset)')
     p.add_argument('--print-preset-size',action='store_true',help='print the selected preset size, if reduced')
-    p.add_argument('--output-res',default='',help='output resolution WxH (the upscaler\'s; the UI stays 1920x1080)')
+    p.add_argument('--output-res',default='',help='output resolution WxH (sets the UI aspect ratio)')
     p.add_argument('--print-scaled',action='store_true',
                    help='print "RENDER OUTPUT" (WxH) when bbport.ini selects an output other than 1080p')
     p.add_argument('--print-fingerprint',action='store_true',
@@ -558,18 +563,16 @@ def main():
     writes=compile_patches(a.xml,names,a.app_version,segments)
     fps_count=len(compile_patches(a.xml,fps_names,a.app_version,segments)) if fps_names else 0  # the first writes
     size=render_size(read_settings(a.settings),a.render_res) if a.render_res and 'resolution' in groups else None
-    # The UI keeps the game's 1920x1080 coordinates even for a larger output: the port draws
-    # it into the output-size image with a viewport scaled by output / 1920
-    # (UiComposition::NativeViewport), so it is rasterized at the output resolution. Ultrawide
-    # outputs widen those coordinates (hud_canvas; run.py passes the same size as BB_UI_RES).
+    # The port scales the HUD canvas to the output (UiComposition::NativeViewport); 16:10
+    # and ultrawide outputs need their own aspect fixes and coordinates (BB_UI_RES).
     output=tuple(int(v) for v in a.output_res.lower().split('x')) if a.output_res else OUTPUT_SIZE
     ui=ui_viewport(output,read_settings(a.settings))
     if size:
         writes+=resolution_writes(a.xml,size,a.app_version,segments,ui)
-        if hud_canvas(output)!=OUTPUT_SIZE:
+        if hud_canvas(output)[0]>OUTPUT_SIZE[0]:
             writes+=ultrawide_writes(a.xml,output,a.app_version,segments)
             names.append(f'ultrawide {output[0]}x{output[1]} (HUD {ui[0]}x{ui[1]})')
-        elif ui!=OUTPUT_SIZE:
+        elif ui!=hud_canvas(output):
             names.append(f'Sharp UI {ui[0]}x{ui[1]}')
         if size[0]*size[1]>OUTPUT_SIZE[0]*OUTPUT_SIZE[1]:
             writes+=compile_patches(a.xml,[HEAP_PATCH],a.app_version,segments)

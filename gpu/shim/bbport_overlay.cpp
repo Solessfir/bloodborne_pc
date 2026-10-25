@@ -757,7 +757,9 @@ void Menu() {
     static const char* outputs[] = {"1280 x 720", "1920 x 1080", "2560 x 1440", "3840 x 2160",
                                     "2560 x 1080 (21:9)", "3440 x 1440 (21:9)",
                                     "3840 x 1600 (21:9)", "5120 x 2160 (21:9)",
-                                    "3840 x 1080 (32:9)", "5120 x 1440 (32:9)"};
+                                    "3840 x 1080 (32:9)", "5120 x 1440 (32:9)",
+                                    "1280 x 800 (16:10)", "1920 x 1200 (16:10)",
+                                    "2560 x 1600 (16:10)", "3840 x 2400 (16:10)"};
     static_assert(sizeof(outputs) / sizeof(*outputs) == BbSettings::OutputCount);
     int output = s.output_res;
     if (ImGui::BeginCombo("Output resolution", outputs[output])) {
@@ -775,7 +777,7 @@ void Menu() {
                                                          hud == 100 ? "Screen edges" : "%d%%"));
         Hint("Ultrawide (21:9, 32:9): moves the health, items and Blood Echoes from the centred 16:9 area toward the screen edges. Changes require a restart.");
     }
-    if (BbSettings::FixedRenderSession()) {
+    if (BbSettings::FixedRenderSession() || BbSettings::NonNativeAspect(s.output_res)) {
         Hint("Final image and HUD resolution. The preset controls scene resolution relative to the output. 4K Performance is approximately 1920x1080. Changes require a restart.");
     } else {
         Hint("Output and HUD resolution changes at the next frame boundary. The preset controls scene resolution relative to the output. Resizing resets upscaler history and may pause briefly.");

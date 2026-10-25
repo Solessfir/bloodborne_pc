@@ -10,9 +10,10 @@ from unittest import mock
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from patches import (EBOOT_BASE, FIXES, FPS_PRESETS, OUTPUT_SIZE, RESOLUTION_TEMPLATE, SCENE_HEIGHT,
+from patches import (CAMERA_ASPECT, EBOOT_BASE, FIXES, FPS_PRESETS, HUD_PROJECTION_WIDTH, MARKER_BIAS,
+                     OUTPUT_SIZE, RESOLUTION_TEMPLATE, RESOLUTION_16_10_TEMPLATE, SCENE_HEIGHT,
                      SCENE_WIDTH, UI_HEIGHT, UI_WIDTH, compile_patches,
-                     render_size, resolution_writes, scaled_sizes, effect_patches,
+                     hud_canvas, render_size, resolution_writes, scaled_sizes, effect_patches,
                      validate_patch_requirements, external_patches, external_selection,
                      compile_external, eboot_bytes, eboot_matches_patches, patch_fingerprint,
                      patch_sites, PATCH_GROUPS, image_groups, matching_groups, game_app_version, eboot_is_109)
@@ -91,6 +92,91 @@ class NativeUiTests(unittest.TestCase):
                          ((1916, 1078), (3840, 2160)))
         # TAA is native-only and uses the live host targets.
         self.assertIsNone(scaled_sizes({'output_res': '1280x720', 'upscaler': 'taa', 'preset': '3'}))
+
+
+class SixteenTenTests(unittest.TestCase):
+    def test_scaled_scene_and_native_taa_sizes(self):
+        cases = [((1280, 800), (1280, 800), (854, 534), (640, 400)),
+                 ((1920, 1200), (1916, 1198), (1280, 800), (960, 600)),
+                 ((2560, 1600), (2560, 1600), (1706, 1066), (1280, 800)),
+                 ((3840, 2400), (3840, 2400), (2560, 1600), (1916, 1198))]
+        for output, native, quality, performance in cases:
+            for upscaler in ('fsr3', 'fsr4', 'dlss', 'off', 'taa'):
+                for preset, expected in ((0, native), (1, quality), (3, performance)):
+                    with self.subTest(output=output, upscaler=upscaler, preset=preset):
+                        settings = {'output_res': f'{output[0]}x{output[1]}',
+                                    'upscaler': upscaler, 'preset': str(preset)}
+                        scene = native if upscaler in ('off', 'taa') else expected
+                        self.assertEqual(scaled_sizes(settings), (scene, output))
+        for output in ('1920x1080', '3840x2160', '3440x1440'):
+            self.assertIsNone(scaled_sizes({'output_res': output, 'upscaler': 'taa', 'preset': '3'}))
+
+    def test_template_fixes_survive_independent_scene_and_ui_sizes(self):
+        original = compile_patches(XML, [RESOLUTION_16_10_TEMPLATE], '01.09', SEGMENTS)
+        viewport = {SCENE_WIDTH, SCENE_HEIGHT, UI_WIDTH, UI_HEIGHT}
+        for output in ((1280, 800), (1920, 1200), (2560, 1600), (3840, 2400)):
+            with self.subTest(output=output):
+                settings = {'output_res': f'{output[0]}x{output[1]}', 'preset': '1'}
+                scene, _ = scaled_sizes(settings)
+                ui = hud_canvas(output)
+                writes = resolution_writes(XML, scene, '01.09', SEGMENTS, ui)
+                self.assertEqual(immediate(writes, SCENE_WIDTH), (0xB8, scene[0]))
+                self.assertEqual(immediate(writes, SCENE_HEIGHT), (0xB8, scene[1]))
+                self.assertEqual(immediate(writes, UI_WIDTH), (0xB8, 1920))
+                self.assertEqual(immediate(writes, UI_HEIGHT), (0xB9, 1200))
+                self.assertEqual([w for w in writes if w[0] not in viewport],
+                                 [w for w in original if w[0] not in viewport])
+                values = dict(writes)
+                self.assertAlmostEqual(struct.unpack('<f', values[CAMERA_ASPECT])[0], 1.6)
+                self.assertEqual(struct.unpack('<f', values[HUD_PROJECTION_WIDTH])[0], 1920)
+                self.assertEqual(struct.unpack('<f', values[HUD_PROJECTION_WIDTH + 4])[0], 1200)
+                for site in MARKER_BIAS:
+                    self.assertEqual(struct.unpack('<f', values[site])[0], 0.5)
+                    self.assertAlmostEqual(struct.unpack('<f', values[site + 4])[0], 0.45)
+
+    def test_sixteen_ten_writes_are_fingerprinted(self):
+        self.assertIn(RESOLUTION_16_10_TEMPLATE, PATCH_GROUPS['resolution'])
+
+    def test_unexpected_sixteen_ten_height_instruction_is_rejected(self):
+        tree = ET.parse(XML)
+        for meta in tree.getroot().iter('Metadata'):
+            if meta.get('Name') == RESOLUTION_16_10_TEMPLATE and meta.get('AppVer') == '01.09':
+                for line in meta.find('PatchList'):
+                    if int(line.get('Address'), 0) == UI_HEIGHT + EBOOT_BASE:
+                        line.set('Value', '0x0002D0B9')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'patch.xml'
+            tree.write(path)
+            with self.assertRaisesRegex(ValueError, 'unexpected resolution patch'):
+                resolution_writes(path, (1280, 800), '01.09', SEGMENTS, (1920, 1200))
+
+    def test_cli_keeps_sixteen_ten_fixes_without_ultrawide_overrides(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            elf = bytearray(elf_image(bytes(0x100)))
+            struct.pack_into('<Q', elf, 0x68, SEGMENTS[0][1])
+            (out / 'eboot.elf').write_bytes(elf)
+            settings = out / 'bbport.ini'
+            settings.write_text('quit_to_desktop=0\nrebirth=0\n')
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/patches.py'),
+                                     '--out', str(out), '--settings', str(settings), '--fps', '30',
+                                     '--game-dir', str(out), '--render-res', '1280x800',
+                                     '--output-res', '1920x1200'], capture_output=True, text=True,
+                                    env={**os.environ, 'BB_FORCE_PATCHES': '1'})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('scene 1280x800; UI 1920x1200', result.stdout)
+            self.assertNotIn('ultrawide', result.stdout)
+            blob = (out / 'patches.bin').read_bytes()
+            count, = struct.unpack_from('<Q', blob, 16)
+            writes = {}
+            position = 24
+            for _ in range(count):
+                offset, size = struct.unpack_from('<QQ', blob, position)
+                position += 16
+                writes[offset] = blob[position:position + size]
+                position += size
+            self.assertAlmostEqual(struct.unpack('<f', writes[CAMERA_ASPECT])[0], 1.6)
+            self.assertEqual(struct.unpack('<f', writes[HUD_PROJECTION_WIDTH + 4])[0], 1200)
 
 
 class PhysicsStepTests(unittest.TestCase):

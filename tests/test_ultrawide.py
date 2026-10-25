@@ -27,9 +27,12 @@ class UltrawideTests(unittest.TestCase):
     def test_canvas(self):
         self.assertEqual(hud_canvas((3440, 1440)), (2580, 1080))
         self.assertEqual(hud_canvas((2560, 1080)), (2560, 1080))
-        # 16:9 and narrower keep the game's own coordinates.
+        # 16:9 and narrower ratios without a dedicated template keep the game's coordinates.
         self.assertEqual(hud_canvas((3840, 2160)), OUTPUT_SIZE)
-        self.assertEqual(hud_canvas((1920, 1200)), OUTPUT_SIZE)
+        self.assertEqual(hud_canvas((1280, 960)), OUTPUT_SIZE)
+        for output in ((1280, 800), (1920, 1200), (2560, 1600), (3840, 2400)):
+            with self.subTest(output=output):
+                self.assertEqual(hud_canvas(output), (1920, 1200))
 
     def test_2560x1080_matches_the_community_patch(self):
         ours = apply(ultrawide_writes(XML, (2560, 1080), '01.09', SEGMENTS))

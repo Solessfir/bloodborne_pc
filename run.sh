@@ -60,7 +60,7 @@ fi
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
 # Sizes chosen below for the previous launch are recomputed after an in-game restart.
 if [[ ${BB_AUTO_RENDER_RES:-} == 1 ]]; then
-    unset BB_RENDER_RES BB_OUTPUT_RES BB_AUTO_RENDER_RES
+    unset BB_RENDER_RES BB_OUTPUT_RES BB_AUTO_RENDER_RES BB_UI_RES
 fi
 # BB_RENDER_RES=WxH explicitly sets the game's render resolution (a patch at start).
 # Frame rate: BB_FPS=uncap (default; delta-time patch, vblank follows the display),
@@ -105,6 +105,15 @@ if [[ -n ${scaled_output:-} ]]; then
             [[ $line == *MANGOHUD* ]] || printf '%s\n' "$line"; done >&2)) || live=0
     fi
     [[ $live == 1 ]] || live=0
+    if [[ $scaled_output =~ ^([0-9]+)x([0-9]+)$ ]] &&
+       (( BASH_REMATCH[1] * 9 != BASH_REMATCH[2] * 16 )); then
+        live=0
+        export BB_UI_RES
+        BB_UI_RES=$("$PYTHON" -c 'import sys; sys.path.insert(0,"scripts"); from patches import hud_canvas; print("%dx%d" % hud_canvas(tuple(map(int,sys.argv[1].split("x")))))' "$scaled_output")
+        echo "Output ${scaled_output}: camera and HUD startup patch (${BB_UI_RES})"
+    else
+        unset BB_UI_RES
+    fi
 fi
 if [[ $live == 1 ]]; then
     echo "Output ${scaled_output}: live resolution changes (live_resolution=0: startup patch)"

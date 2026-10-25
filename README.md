@@ -151,6 +151,30 @@ See [packaging/windows/README.md](packaging/windows/README.md): MSYS2 CLANG64, `
 then `bash packaging/windows/package.sh`. DLSS is built separately with
 `packaging/windows/build_dlss.sh` (needs Visual Studio 2022).
 
+Linux: `bash build.sh`. Optional native DLSS Super Resolution and DLAA need an NVIDIA RTX GPU
+and a checkout of the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS):
+
+```bash
+DLSS_SDK_ROOT=/path/to/DLSS bash tools/build_dlss.sh
+```
+
+Select DLSS in the launcher or in-game menu; Native AA uses DLAA. Keep `libbbport_dlss.so`,
+`libnvidia-ngx-dlss.so.*` and `NVIDIA-DLSS-LICENSE.txt` beside `bb-probe` when copying the build.
+The bridge is optional; unsupported systems fall back to FSR 3.1. DLSS Frame Generation is
+currently enabled only on Windows. For Linux launch instructions, see the
+[original README](docs/original-readme/README.md#build-and-run).
+
+Application-menu shortcut: `bash launcher/install-desktop.sh install`; remove it with
+`bash launcher/install-desktop.sh -r`. Use `bash launcher/install-desktop.sh --play` instead
+to install a shortcut that starts the game directly with saved settings. Run this from the copy you want the shortcut to launch.
+
+GPU smoke test: `ninja -C out/gpu dlss-bridge-test && out/gpu/dlss-bridge-test out`.
+It evaluates synthetic DLAA and Quality frames and checks the GPU output.
+
+16:10 outputs (1280×800, 1920×1200, 2560×1600 and 3840×2400) are available in the launcher and
+in-game output settings. They use the bundled camera, HUD and lock-on patches for game version
+1.09 and require a restart. TAA runs at native output resolution; DLSS and FSR use the selected preset.
+
 ## Credits
 
 Built on [bbport](https://github.com/deadinside28/bloodborne_pc), the native Linux port of

@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <string>
+#include <string_view>
 #ifdef _WIN32
 #include <filesystem>
 #include <windows.h>
@@ -104,6 +105,29 @@ int main() {
     setenv("BB_RENDER_RES", "", 1);
     assert(!FixedRenderSession() && !ResolutionNeedsRestart());
     unsetenv("BB_RENDER_RES");
+    s.upscaler = UpscalerDlss;
+    for (int resolution = 10; resolution < OutputCount; ++resolution) {
+        assert(OutputWidths[resolution] * 10 == OutputHeights[resolution] * 16);
+        assert(NonNativeAspect(resolution) && !Ultrawide(resolution));
+        s.startup_output_res = OutputDefault;
+        s.output_res = resolution;
+        assert(ResolutionNeedsRestart());
+        s.startup_output_res = resolution;
+        assert(!ResolutionNeedsRestart());
+        s.output_res = OutputDefault;
+        assert(ResolutionNeedsRestart());
+        s.output_res = resolution;
+        Save();
+        s.output_res = OutputDefault;
+        Load();
+        assert(s.output_res == resolution);
+    }
+    ConfigureDlssSupport(false, "bridge unavailable");
+    assert(s.upscaler == UpscalerFsr3 && !s.dlss_supported);
+    assert(s.dlss_problem && std::string_view{s.dlss_problem.load()} == "bridge unavailable");
+    ConfigureDlssSupport(true, nullptr);
+    s.upscaler = UpscalerDlss;
+    assert(s.dlss_supported && !s.dlss_problem && s.upscaler == UpscalerDlss);
     std::remove(path);
     std::puts("Upscaler support: saved choices and FSR 3.1 fallback PASS");
 }

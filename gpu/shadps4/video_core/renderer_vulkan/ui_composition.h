@@ -21,7 +21,7 @@ constexpr Background Choose(bool scaled, bool ui_draw, bool scene_ready, bool fs
 }
 
 // The game's UI coordinate space: 1920x1080, or wider for ultrawide outputs (BB_UI_RES from
-// run.py, patches.py hud_canvas: the HUD canvas stays 1080 high).
+// run.py, patches.py hud_canvas), or 1920x1200 for 16:10.
 inline std::array<uint32_t, 2> Canvas() {
     static const std::array<uint32_t, 2> canvas = [] {
         uint32_t w = 0, h = 0;

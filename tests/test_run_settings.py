@@ -34,7 +34,7 @@ class RestartResolutionTests(unittest.TestCase):
             python = data / 'python'
             python.write_text(f'#!{sys.executable}\n' +
                 'import subprocess, sys\n'
-                'if sys.argv[1] in ("scripts/patches.py", "scripts/mods.py"):\n'
+                'if sys.argv[1] in ("scripts/patches.py", "scripts/mods.py", "-c"):\n'
                 '    sys.exit(subprocess.call([sys.executable, *sys.argv[1:]]))\n')
             python.chmod(0o755)
             probe = data / 'probe'
@@ -45,7 +45,7 @@ class RestartResolutionTests(unittest.TestCase):
                 'stage=int(os.environ.get("BB_TEST_STAGE", "0"))\n'
                 'with (config.parent/"environments").open("a") as f:\n'
                 '    f.write(json.dumps({key:os.environ.get(key) for key in '
-                '("BB_RENDER_RES", "BB_OUTPUT_RES", "BB_AUTO_RENDER_RES")})+"\\n")\n'
+                '("BB_RENDER_RES", "BB_OUTPUT_RES", "BB_AUTO_RENDER_RES", "BB_UI_RES")})+"\\n")\n'
                 'if stage<2:\n'
                 '    config.write_text("upscaler=fsr3\\npreset=4\\noutput_res="+'
                 '("1280x720" if stage==0 else "1920x1080")+"\\n")\n'
@@ -54,7 +54,7 @@ class RestartResolutionTests(unittest.TestCase):
             probe.chmod(0o755)
             env = dict(os.environ, BB_PREBUILT='1', BB_PROBE=str(probe), PYTHON=str(python),
                        BB_DATA_DIR=str(data), BB_CONFIG=str(config), BB_GAME_DIR=str(data))
-            for key in ('BB_RENDER_RES', 'BB_OUTPUT_RES', 'BB_AUTO_RENDER_RES', 'BB_TEST_STAGE'):
+            for key in ('BB_RENDER_RES', 'BB_OUTPUT_RES', 'BB_AUTO_RENDER_RES', 'BB_UI_RES', 'BB_TEST_STAGE'):
                 env.pop(key, None)
             env.pop('BB_LIVE_RES', None)
             if explicit:
@@ -70,6 +70,13 @@ class RestartResolutionTests(unittest.TestCase):
             subprocess.run([shutil.which('bash'), 'run.sh'], cwd=ROOT, env=env,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
             return [json.loads(line) for line in (data / 'environments').read_text().splitlines()]
+
+    def test_16_10_forces_startup_patch_and_restarts_clear_the_hud_canvas(self):
+        for upscaler, render in [('dlss', '1706x1066'), ('taa', '2560x1600')]:
+            rows = self.run_restarts(live=True, ini_extra=f'upscaler={upscaler}\noutput_res=2560x1600\n')
+            self.assertEqual(rows[0]['BB_RENDER_RES'], render)
+            self.assertEqual(rows[0]['BB_OUTPUT_RES'], '2560x1600')
+            self.assertEqual([row['BB_UI_RES'] for row in rows], ['1920x1200', None, None])
 
     def test_outputs_other_than_1080p_patch_the_render_size_and_restarts_recompute_it(self):
         rows = self.run_restarts()

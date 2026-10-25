@@ -64,15 +64,18 @@ inline constexpr Effect Effects[] = {
     {"steady_cloth", "Cloth as on PS4 (30 FPS)", true},
 };
 inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
-/// Output resolutions: the upscaler's output and the UI host targets. The 16:9 ones change
-/// live; the ultrawide ones need the startup patch (patches.py ultrawide_writes, run.py).
-inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840, 2560, 3440, 3840, 5120, 3840, 5120};
-inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160, 1080, 1440, 1600, 2160, 1080, 1440};
-inline constexpr int OutputCount = 10;
+/// Output resolutions: the upscaler's output and UI targets. Non-native aspects require camera and HUD startup patches.
+inline constexpr int OutputWidths[] = {1280, 1920, 2560, 3840, 2560, 3440, 3840, 5120, 3840, 5120, 1280, 1920, 2560, 3840};
+inline constexpr int OutputHeights[] = {720, 1080, 1440, 2160, 1080, 1440, 1600, 2160, 1080, 1440, 800, 1200, 1600, 2400};
+inline constexpr int OutputCount = sizeof(OutputWidths) / sizeof(*OutputWidths);
 inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 /// Wider than 16:9: camera and HUD patched at startup.
 inline bool Ultrawide(int output) {
     return OutputWidths[output] * 9 > OutputHeights[output] * 16;
+}
+
+inline bool NonNativeAspect(int output) {
+    return OutputWidths[output] * 9 != OutputHeights[output] * 16;
 }
 
 /// Button prompts (bbport_prompts.cpp): the game's icons switch with the device in use, or stay.

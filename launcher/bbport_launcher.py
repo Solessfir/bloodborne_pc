@@ -35,11 +35,13 @@ MAX_LOG_LINES = 5000
 
 # Choices: (label, value). The first entry is the default. Labels are translated when shown.
 UI_LANGUAGES = [("Как в системе", ""), ("Русский", "ru"), ("English", "en")]
-UPSCALERS = [("FSR 4", "fsr4"), ("FSR 4.1.1", "fsr411"), ("FSR 3", "fsr3"),
+UPSCALERS = [("FSR 4", "fsr4"), ("FSR 4.1.1", "fsr411"), ("FSR 3", "fsr3"), ("DLSS", "dlss"),
              ("TAA (нативное сглаживание)", "taa"), ("Выключен", "off")]
 PRESETS = [("Native AA", 0), ("Quality (x1.5)", 1), ("Balanced (x1.7)", 2),
            ("Performance (x2)", 3), ("Ultra Performance (x3)", 4)]
-OUTPUT_RES = [("1280×720 (Steam Deck)", "1280x720"), ("1920×1080", "1920x1080"), ("2560×1440", "2560x1440"), ("3840×2160", "3840x2160")]
+OUTPUT_RES = [("1280×720", "1280x720"), ("1920×1080", "1920x1080"), ("2560×1440", "2560x1440"), ("3840×2160", "3840x2160"),
+              ("1280×800 (Steam Deck, 16:10)", "1280x800"), ("1920×1200 (16:10)", "1920x1200"),
+              ("2560×1600 (16:10)", "2560x1600"), ("3840×2400 (16:10)", "3840x2400")]
 # Game effects (patches applied at start): bbport.ini key, title, default.
 EFFECTS = [
     ("effect_chromatic_aberration", "Хроматическая аберрация", True),

@@ -315,9 +315,9 @@ int RenderPreset() {
 
 bool ResolutionNeedsRestart() {
     const auto& v = Get();
-    // TAA needs the live path (native guest targets): run.sh selects it on restart. Ultrawide
-    // outputs patch the camera and HUD at startup.
-    if (Ultrawide(v.output_res) != Ultrawide(v.startup_output_res)) return true;
+    // Non-native aspects patch the camera and HUD at startup.
+    if ((NonNativeAspect(v.output_res) || NonNativeAspect(v.startup_output_res)) &&
+        v.output_res != v.startup_output_res) return true;
     if (Ultrawide(v.output_res) && v.hud_position != v.startup_hud_position) return true;
     return FixedRenderSession() &&
         (v.preset != v.startup_preset || v.output_res != v.startup_output_res ||

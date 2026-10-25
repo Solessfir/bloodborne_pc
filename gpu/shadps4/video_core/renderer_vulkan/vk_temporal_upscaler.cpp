@@ -170,7 +170,7 @@ TemporalUpscaler::TemporalUpscaler(const Instance& instance_, Scheduler& schedul
     {
         const Dlss* dlss = Dlss::Get();
         static std::string problem;
-        problem = !dlss ? "bbport_dlss.dll and nvngx_dlss.dll are not installed"
+        problem = !dlss ? "DLSS bridge or NVIDIA runtime is not installed"
                         : dlss->Problem();
         BbSettings::ConfigureDlssSupport(dlss && dlss->Available(), problem.c_str());
     }
@@ -222,6 +222,10 @@ TemporalUpscaler::TemporalUpscaler(const Instance& instance_, Scheduler& schedul
 
 TemporalUpscaler::~TemporalUpscaler() {
     if (resources_ready) scheduler.Finish();
+    if (Dlss* dlss = Dlss::Get()) {
+        scheduler.Finish();
+        dlss->ReleaseFeature();
+    }
     if (context) {
         scheduler.Finish();
         ffxVkPortableUpscaleContextDestroy(context);
@@ -303,9 +307,9 @@ bool TemporalUpscaler::OnFrameStart() {
                                  upscaler == BbSettings::UpscalerFsr412) &&
                                 applied_fsr_backend != backend;
     const int output = settings.output_res.load();
-    // Ultrawide outputs apply after a restart (startup patch), not live.
+    // Non-native aspects apply after a restart (camera and HUD patches).
     const bool output_changed = !scaled_session && applied_output != output &&
-                                !BbSettings::Ultrawide(output);
+                                !BbSettings::NonNativeAspect(output);
     if (output_changed) {
         target_width = BbSettings::OutputWidths[output];
         target_height = BbSettings::OutputHeights[output];
@@ -1749,18 +1753,17 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
     };
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
-    // Ultrawide: menus without a scene draw their backdrop over the 1920-wide stage only and
-    // leave the game's grey clear color beside it. Those columns are black instead. A frame
-    // with a scene (G-buffer depth this frame) fills the whole width: upscaler off, or a menu
-    // over the world.
+    // Menus without a scene leave the game's grey clear outside the 1920x1080 stage. Keep those margins black.
     const bool scene = !camera_motion.Enabled() || camera_motion.Depth();
-    // (In stage units: with Sharp UI the canvas is the stage scaled up, no wider.)
-    const float side = scene ? 0.0f
-                             : 0.5f * (1.0f - 1920.0f * UiComposition::StageScale() /
-                                                  float(UiComposition::Canvas()[0]));
+    // (In stage units: with Sharp UI the canvas is the stage scaled up.)
+    const float stage = UiComposition::StageScale();
+    const float side = scene ? 0.0f : 0.5f * (1.0f - 1920.0f * stage / float(UiComposition::Canvas()[0]));
+    const float top = scene ? 0.0f : 0.5f * (1.0f - 1080.0f * stage / float(UiComposition::Canvas()[1]));
     const s32 src_side = s32(std::lround(source_width * side));
     const s32 dst_side = s32(std::lround(ui_width * side));
-    if (dst_side > 0) {
+    const s32 src_top = s32(std::lround(source_height * top));
+    const s32 dst_top = s32(std::lround(ui_height * top));
+    if (dst_side > 0 || dst_top > 0) {
         cmd.clearColorImage(vk::Image(ui_image), vk::ImageLayout::eTransferDstOptimal,
                             vk::ClearColorValue{std::array{0.0f, 0.0f, 0.0f, 1.0f}},
                             vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
@@ -1772,11 +1775,11 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     }
     const vk::ImageBlit region{
         .srcSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-        .srcOffsets = std::array{vk::Offset3D{src_side, 0, 0},
-            vk::Offset3D{s32(source_width) - src_side, s32(source_height), 1}},
+        .srcOffsets = std::array{vk::Offset3D{src_side, src_top, 0},
+            vk::Offset3D{s32(source_width) - src_side, s32(source_height) - src_top, 1}},
         .dstSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-        .dstOffsets = std::array{vk::Offset3D{dst_side, 0, 0},
-            vk::Offset3D{s32(ui_width) - dst_side, s32(ui_height), 1}},
+        .dstOffsets = std::array{vk::Offset3D{dst_side, dst_top, 0},
+            vk::Offset3D{s32(ui_width) - dst_side, s32(ui_height) - dst_top, 1}},
     };
     cmd.blitImage(source, source_layout,
                   vk::Image(ui_image), vk::ImageLayout::eTransferDstOptimal, region,
