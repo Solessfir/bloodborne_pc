@@ -103,7 +103,7 @@ fi
 "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
 # Sizes chosen below for the previous launch are recomputed after an in-game restart.
 if [[ ${BB_AUTO_RENDER_RES:-} == 1 ]]; then
-    unset BB_RENDER_RES BB_OUTPUT_RES BB_AUTO_RENDER_RES
+    unset BB_RENDER_RES BB_OUTPUT_RES BB_AUTO_RENDER_RES BB_UI_RES
 fi
 # BB_RENDER_RES=WxH explicitly sets the game's render resolution (a patch at start).
 # Frame rate: BB_FPS=uncap (default; delta-time patch, vblank follows the display),

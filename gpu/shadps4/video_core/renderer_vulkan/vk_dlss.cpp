@@ -17,8 +17,11 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include "../../../dlss_bridge/bbport_dlss_bridge.h"
+#else
+#include <dlfcn.h>
+#include <SDL3/SDL_stdinc.h>
 #endif
+#include "../../../dlss_bridge/bbport_dlss_bridge.h"
 
 namespace Vulkan {
 
@@ -27,17 +30,33 @@ int Dlss::QualityForScale(float scale) {
     return scale >= 2.9f ? 4 : scale >= 1.95f ? 3 : scale >= 1.65f ? 2 : scale > 1.01f ? 1 : 0;
 }
 
-#ifdef _WIN32
-
 namespace {
+#ifdef _WIN32
 constexpr wchar_t BridgeName[] = L"bbport_dlss.dll";
 constexpr wchar_t NgxName[] = L"nvngx_dlss.dll";
+#else
+constexpr char BridgeName[] = "libbbport_dlss.so";
+#endif
 
 std::filesystem::path ExecutableDirectory() {
+#ifdef _WIN32
     std::wstring path(MAX_PATH, L'\0');
     const DWORD length = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
     path.resize(length);
     return std::filesystem::path{path}.parent_path();
+#else
+    return std::filesystem::read_symlink("/proc/self/exe").parent_path();
+#endif
+}
+
+std::wstring NgxPath(const std::filesystem::path& path) {
+#ifdef _WIN32
+    return path.wstring();
+#else
+    const std::unique_ptr<char, decltype(&SDL_free)> wide{
+        SDL_iconv_string("WCHAR_T", "UTF-8", path.c_str(), path.native().size() + 1), SDL_free};
+    return wide ? std::wstring{reinterpret_cast<const wchar_t*>(wide.get())} : std::wstring{};
+#endif
 }
 
 void BridgeLog(int warning, const char* message) {
@@ -70,7 +89,11 @@ bool CollectExtensions(const VkExtensionProperties* required, u32 count,
 } // namespace
 
 struct Dlss::Impl {
+#ifdef _WIN32
     HMODULE module{};
+#else
+    void* module{};
+#endif
     const BbDlssApi* api{};
     std::vector<std::string> instance_extensions, device_extensions;
     std::optional<FeatureDesc> feature;
@@ -93,10 +116,14 @@ Dlss* Dlss::Get() {
             return nullptr;
         }
         const auto directory = ExecutableDirectory();
-        if (!std::filesystem::is_regular_file(directory / BridgeName) ||
-            !std::filesystem::is_regular_file(directory / NgxName)) {
+        if (!std::filesystem::is_regular_file(directory / BridgeName)) {
             return nullptr;
         }
+#ifdef _WIN32
+        if (!std::filesystem::is_regular_file(directory / NgxName)) {
+            return nullptr;
+        }
+#endif
         auto* created = new Dlss;
         // The process may end through quick_exit/_exit paths: release NGX first when it can.
         std::atexit([] {
@@ -111,14 +138,24 @@ Dlss* Dlss::Get() {
 
 Dlss::Dlss() : impl{std::make_unique<Impl>()} {
     const auto directory = ExecutableDirectory();
+#ifdef _WIN32
     impl->module = LoadLibraryW((directory / BridgeName).c_str());
     const auto get_api =
         impl->module ? reinterpret_cast<BbDlssGetApiFn>(GetProcAddress(impl->module, "BbDlssGetApi"))
                      : nullptr;
+#else
+    impl->module = dlopen((directory / BridgeName).c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!impl->module) {
+        impl->Disable(dlerror());
+        return;
+    }
+    const auto get_api = reinterpret_cast<BbDlssGetApiFn>(dlsym(impl->module, "BbDlssGetApi"));
+#endif
     impl->api = get_api ? get_api() : nullptr;
     // ABI 1 bridges (DLSS only) still work; Frame Generation needs ABI 2.
     if (!impl->api || impl->api->abi < 1 || impl->api->abi > BBPORT_DLSS_BRIDGE_ABI) {
-        impl->Disable("bbport_dlss.dll is missing or from another version");
+        impl->api = nullptr;
+        impl->Disable("DLSS bridge is missing or from another version");
         return;
     }
     // NGX writes its logs and model updates here: beside the saves and shader caches.
@@ -128,7 +165,17 @@ Dlss::Dlss() : impl{std::make_unique<Impl>()} {
     }
     std::error_code error;
     std::filesystem::create_directories(data, error);
-    if (!impl->api->Configure(directory.c_str(), data.c_str(), BridgeLog)) {
+    if (error) {
+        impl->Disable("cannot create DLSS data directory");
+        return;
+    }
+    const auto runtime_path = NgxPath(directory);
+    const auto data_path = NgxPath(data);
+    if (runtime_path.empty() || data_path.empty()) {
+        impl->Disable("DLSS paths are not valid UTF-8");
+        return;
+    }
+    if (!impl->api->Configure(runtime_path.c_str(), data_path.c_str(), BridgeLog)) {
         impl->Disable("bridge configuration failed");
     }
 }
@@ -319,50 +366,5 @@ void Dlss::Shutdown() {
         impl->initialized = false;
     }
 }
-
-#else
-
-struct Dlss::Impl {};
-Dlss::Dlss() = default;
-Dlss::~Dlss() = default;
-Dlss* Dlss::Get() {
-    return nullptr;
-}
-void Dlss::AppendInstanceExtensions(std::vector<const char*>&) {}
-void Dlss::AppendDeviceExtensions(vk::Instance, vk::PhysicalDevice, std::vector<const char*>&) {}
-void Dlss::Initialize(vk::Instance, vk::PhysicalDevice, vk::Device) {}
-void Dlss::Disable(const std::string&) {}
-void Dlss::Shutdown() {}
-bool Dlss::Available() const {
-    return false;
-}
-std::string Dlss::Problem() const {
-    return {};
-}
-bool Dlss::HasFeature(const FeatureDesc&) const {
-    return false;
-}
-bool Dlss::CreateFeature(vk::CommandBuffer, const FeatureDesc&) {
-    return false;
-}
-bool Dlss::Evaluate(vk::CommandBuffer, const Frame&) {
-    return false;
-}
-void Dlss::ReleaseFeature() {}
-int Dlss::FrameGenMaxCount() const {
-    return 0;
-}
-bool Dlss::HasFrameGen(const FrameGenDesc&) const {
-    return false;
-}
-bool Dlss::CreateFrameGen(vk::CommandBuffer, const FrameGenDesc&) {
-    return false;
-}
-bool Dlss::EvaluateFrameGen(vk::CommandBuffer, const FrameGenFrame&) {
-    return false;
-}
-void Dlss::ReleaseFrameGen() {}
-
-#endif
 
 } // namespace Vulkan

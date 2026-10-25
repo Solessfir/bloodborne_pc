@@ -299,7 +299,7 @@ if (WIN32)
     target_include_directories(bbgpu PRIVATE third_party/xbyak)
     target_link_libraries(bbgpu PUBLIC Vulkan::Vulkan ws2_32 bcrypt ntdll synchronization winmm d3d12 dxgi dxguid)
 else()
-    target_link_libraries(bbgpu PUBLIC PkgConfig::X11)
+    target_link_libraries(bbgpu PUBLIC PkgConfig::X11 PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 # bbport (Windows): bbgpu is a static library there, so the loader and the HLE runtime are
@@ -360,7 +360,13 @@ if (WIN32)
     target_link_options(bb-play PRIVATE -municode)
 endif()
 
-# Explicit test targets; neither launches the game nor needs a Vulkan device.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(dlss-bridge-test EXCLUDE_FROM_ALL ../tests/test_dlss_bridge.cpp)
+    target_include_directories(dlss-bridge-test PRIVATE ..)
+    target_link_libraries(dlss-bridge-test PRIVATE Vulkan::Vulkan ${CMAKE_DL_LIBS})
+endif()
+
+# Explicit test targets below do not launch the game or need a Vulkan device.
 add_executable(fsr411-requirements-test EXCLUDE_FROM_ALL ../tests/test_fsr411_requirements.cpp)
 target_include_directories(fsr411-requirements-test PRIVATE shim)
 target_link_libraries(fsr411-requirements-test PRIVATE Vulkan::Headers)
