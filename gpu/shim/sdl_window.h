@@ -99,9 +99,8 @@ private:
     /// Window thread, every PollEvents: MOU-003. True iff mouse mode is on, the window has
     /// focus, and neither the menu nor the text dialog is capturing input.
     bool WantsMouseCapture() const;
-    /// Window thread: applies SDL_SetWindowRelativeMouseMode only when WantsMouseCapture()'s
-    /// result changed since the last call, and resets the accumulator when capture ends
-    /// (MOU-004, MOU-005) so no stale motion or held button survives into the next capture.
+    /// Window thread: captures the pointer while focused outside the overlay, independently of mouse mode.
+    /// Resets the input accumulator when mouse mode capture ends so no stale motion or held button survives.
     void UpdateMouseCapture();
     bool mouse_captured_last{false};
     /// Window thread, every PollEvents: hides the cursor when the controller was used (button,

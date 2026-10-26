@@ -44,6 +44,15 @@ BUILTIN_SCENARIOS = ASSETS / 'tests'
 FIXED_INI = {'cheat_no_death': True, 'cheat_stealth': True, 'skip_intro': True, 'show_fps': False}
 
 
+def supported():
+    return os.name == 'nt'
+
+
+def unsupported_reason():
+    return ('Automated game tests require Windows window capture, input detection and performance counters.'
+            if not supported() else '')
+
+
 # ---- routes and scenarios -------------------------------------------------------------------------
 def pan_route(seconds=ROUTE_SECONDS):
     """The built-in camera route: still for a moment, then a steady turn to the right and back to
@@ -226,8 +235,18 @@ class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
                                              'PrivateUsage')]
 
 
-def game_pids(name='bb-probe.exe'):
+def game_pids(name=None):
     """The process ids of the game (by its executable's name)."""
+    name = name or ('bb-probe.exe' if os.name == 'nt' else 'bb-probe')
+    if os.name != 'nt':
+        found = []
+        for process in Path('/proc').glob('[0-9]*'):
+            try:
+                if Path(os.readlink(process / 'exe')).name == name:
+                    found.append(int(process.name))
+            except OSError:
+                continue
+        return sorted(found)
     kernel32 = ctypes.windll.kernel32
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)
@@ -247,6 +266,8 @@ def game_pids(name='bb-probe.exe'):
 
 def game_window(pid):
     """The visible top-level window of a process, or None."""
+    if os.name != 'nt':
+        return None
     user32 = ctypes.windll.user32
     found = []
 
@@ -541,6 +562,8 @@ class Run:
             self.sleep(1)
 
     def go(self):
+        if not supported():
+            raise OSError(unsupported_reason())
         t = self.test
         (t.work / 'bbport.ini').write_text(ini_text(t.base_ini, {**FIXED_INI, **t.scenario.settings, **self.settings}),
                                            encoding='utf-8')
@@ -828,6 +851,9 @@ class Test:
             shutil.rmtree(self.work, ignore_errors=True)
 
     def work_thread(self, save_dir):
+        if not supported():
+            self.emit('error', unsupported_reason())
+            return
         results = []
         try:
             if game_pids():

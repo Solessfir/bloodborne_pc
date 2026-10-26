@@ -87,10 +87,10 @@ def add_shortcut(vdf_path, name, exe, start_dir, icon, options=''):
         shortcuts = []
         root.append((MAP, 'shortcuts', shortcuts))
     new = entry(name, exe, start_dir, icon, options)
-    target = f'"{exe}"'.lower()
+    target = os.path.normcase(f'"{exe}"')
     for index, (kind, key, value) in enumerate(shortcuts):
         fields = {k.lower(): v for _t, k, v in value} if kind == MAP else {}
-        if str(fields.get('exe', '')).lower() == target:
+        if os.path.normcase(str(fields.get('exe', ''))) == target:
             # Keep what Steam or the player added (play time, tags).
             kept = {k.lower() for k in ('LastPlayTime', 'tags')}
             old = {k.lower(): (t, k, v) for t, k, v in value}
@@ -111,12 +111,18 @@ def add_shortcut(vdf_path, name, exe, start_dir, icon, options=''):
 
 
 def steam_folder():
-    """Steam's install folder from the registry, or None."""
+    """Steam's install folder from the host's standard locations, or None."""
+    if os.name != 'nt':
+        home = Path.home()
+        data = Path(os.environ.get('XDG_DATA_HOME', home / '.local/share'))
+        candidates = (home / '.steam/steam', home / '.steam/root', data / 'Steam',
+                      home / '.var/app/com.valvesoftware.Steam/.local/share/Steam')
+        return next((path for path in candidates if path.is_dir()), None)
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam') as key:
             path = Path(winreg.QueryValueEx(key, 'SteamPath')[0])
-    except OSError:
+    except (ImportError, OSError):
         return None
     return path if path.is_dir() else None
 
@@ -130,6 +136,14 @@ def user_configs(steam):
 
 def steam_running():
     import subprocess
+    if os.name != 'nt':
+        for path in Path('/proc').glob('[0-9]*/comm'):
+            try:
+                if path.read_text().strip() == 'steam':
+                    return True
+            except OSError:
+                continue
+        return False
     result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq steam.exe', '/NH'], capture_output=True,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     return b'steam.exe' in result.stdout.lower()

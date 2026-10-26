@@ -11,6 +11,13 @@ import bbport_launcher_win as launcher
 import bbport_lang_fsr411 as translations
 
 
+def setUpModule():
+    for module in (launcher, launcher.bbport_fsr411):
+        fixture = patch.object(module, 'WINDOWS', True)
+        fixture.start()
+        unittest.addModuleCleanup(fixture.stop)
+
+
 class BackendSettingsTest(unittest.TestCase):
     def test_dx12_runtime_found_in_package_or_source_build(self):
         import tempfile

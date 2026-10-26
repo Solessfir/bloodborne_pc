@@ -15,6 +15,7 @@ procedure never calls Tk: what it does on a minimize (take_cover) is Windows cal
 
 When anything here fails, install() returns False and the launcher keeps Windows' caption."""
 import ctypes
+import os
 import functools
 import time
 from ctypes import wintypes
@@ -27,7 +28,8 @@ GWLP_WNDPROC = -4
 WS_CHILD, WS_VISIBLE, SS_BITMAP, STM_SETIMAGE, IMAGE_BITMAP, SRCCOPY = 0x40000000, 0x10000000, 0x0E, 0x0172, 0, 0x00CC0020
 SWP_TOP_SHOWN = 0x0001 | 0x0002 | 0x0040  # no size, no move, show: at the top of its siblings
 SWP_FRAMECHANGED = 0x0001 | 0x0002 | 0x0004 | 0x0020  # no size, no move, no z-order, frame changed
-WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_ssize_t)
+AVAILABLE = os.name == 'nt'
+WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_ssize_t) if AVAILABLE else None
 
 
 class NCCALCSIZE_PARAMS(ctypes.Structure):
@@ -82,6 +84,8 @@ class BITMAPINFOHEADER(ctypes.Structure):
 def copy_of(hwnd, w, h):
     """A bitmap (a GDI handle, the caller deletes it) of what a window shows on the screen now: the
     pixels Windows holds for it, nothing drawn anew."""
+    if not AVAILABLE:
+        return None
     u, g = _user32(), _gdi32()
     screen = u.GetDC(hwnd)
     memory = g.CreateCompatibleDC(screen)
@@ -96,6 +100,8 @@ def copy_of(hwnd, w, h):
 
 def picture(hwnd, w, h):
     """What a window shows on the screen now, as a PIL image; None when it cannot be had."""
+    if not AVAILABLE:
+        return None
     from PIL import Image
     g = _gdi32()
     bitmap = copy_of(hwnd, w, h)
@@ -118,7 +124,7 @@ class Frame:
 
     def __init__(self, hwnd, covers):
         self.hwnd, self.covers = hwnd, list(covers)
-        self.user32 = _user32()
+        self.user32 = _user32() if AVAILABLE else None
         self.procs, self.olds = {}, {}
         self.bar, self.buttons, self.edge, self.corner = 32, 138, 5, 10  # physical pixels, set by the launcher
         self.cover_on_minimize = False  # a picture over the window when it goes to the task bar (take_cover)
@@ -219,6 +225,8 @@ class Frame:
             _gdi32().DeleteObject(bitmap)
 
     def install(self):
+        if not AVAILABLE:
+            return False
         try:
             # Once per window: the frame can be the toplevel's own window (wm_frame() before Tk wraps
             # it), and a second subclass would keep the first as Tk's procedure, then free it.

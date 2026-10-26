@@ -19,6 +19,13 @@ import bbport_fsr411 as support
 READY = {'vendor_id': 0x1002, **{m: dict(supported=True, reason='ready', detail='') for m in ('vk', 'dx12')}}
 
 
+def setUpModule():
+    for module in (launcher, support):
+        fixture = patch.object(module, 'WINDOWS', True)
+        fixture.start()
+        unittest.addModuleCleanup(fixture.stop)
+
+
 class DetectionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

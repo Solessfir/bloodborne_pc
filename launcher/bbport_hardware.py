@@ -4,8 +4,8 @@
 The tables and the rating are the website's (its HardwareCheck script): a score per graphics
 card, per processor generation and the memory size give a tier from "Not supported" to
 "4K-ready", the expected frame rate at 1080p, 1440p and 4K, and the suggested upscaler. The
-launcher fills them in by itself: the graphics card from bb-gpu-capabilities.exe (Vulkan), the
-processor from the registry and CPUID, the memory from Windows. It is a rough guide from the
+launcher fills them in by itself: the graphics card from bb-gpu-capabilities (Vulkan), the
+processor and memory from Windows APIs or Linux's kernel. It is a rough guide from the
 requirements and the developer's measurements (RX 7800 XT), not a benchmark. "Not supported" is
 kept for what stops the port: no Vulkan 1.3, a card far too slow, a processor without AVX. Too
 little RAM or video memory is "Below minimum": players run the game with 8 GB and on 3 GB cards.
@@ -13,6 +13,8 @@ little RAM or video memory is "Below minimum": players run the game with 8 GB an
 Texts are English; `tr` translates a template before it is formatted.
 """
 import ctypes
+import os
+from pathlib import Path
 import re
 
 # (vendor, group, name, video memory in GB, score, flags); flags: laptop, igpu, no-vulkan13.
@@ -308,6 +310,15 @@ def cpu_from_name(name):
 
 # ---- detection on this PC ----------------------------------------------------------------------
 def processor_name():
+    if os.name != 'nt':
+        try:
+            for line in Path('/proc/cpuinfo').read_text(encoding='utf-8', errors='replace').splitlines():
+                key, separator, value = line.partition(':')
+                if separator and key.strip() in ('model name', 'Hardware'):
+                    return ' '.join(value.split())
+        except OSError:
+            pass
+        return ''
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'HARDWARE\DESCRIPTION\System\CentralProcessor\0') as key:
@@ -320,6 +331,14 @@ def processor_support():
     """ok / compat / none from CPUID (AVX, then the instructions the port translates), or None."""
     try:
         import cpu_compat
+        if os.name != 'nt':
+            for line in Path('/proc/cpuinfo').read_text(encoding='utf-8', errors='replace').splitlines():
+                if line.startswith('flags'):
+                    if 'avx' not in line.split(':', 1)[1].split():
+                        return 'none'
+                    missing = cpu_compat.missing_host_extensions()
+                    return None if missing is None else 'compat' if missing else 'ok'
+            return None
         found = cpu_compat._cpuid_windows()
         if not found:
             return None
@@ -389,7 +408,12 @@ def detect_cpu():
 
 
 def memory_gb():
-    """Installed memory in GB (what is on the sticks, not what Windows has left)."""
+    """Installed RAM on Windows, or the kernel's usable physical RAM on Linux, in GiB."""
+    if os.name != 'nt':
+        try:
+            return round(os.sysconf('SC_PHYS_PAGES') * os.sysconf('SC_PAGE_SIZE') / 1024 ** 3)
+        except (OSError, ValueError):
+            return 0
     try:
         kb = ctypes.c_ulonglong()
         if ctypes.windll.kernel32.GetPhysicallyInstalledSystemMemory(ctypes.byref(kb)):

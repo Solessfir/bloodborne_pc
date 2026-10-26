@@ -17,6 +17,7 @@ them are shown instead of nothing.
 import re
 import unicodedata
 
+import bbport_help
 import bbport_theme as theme
 
 L = None  # bbport_launcher_win, set by bind()
@@ -208,6 +209,8 @@ WORDS = {
     'topic:smartscreen': 'smartscreen windows geschutzt schutz warnung',
     'topic:black_screen': 'schwarz schwarzer bildschirm black screen shader cache leeren',
 }
+WORDS = {key: words for key, words in WORDS.items()
+         if not key.startswith('topic:') or key[6:] in bbport_help.TOPICS}
 # With the game tests on (bbport_launcher_win.GAME_TESTS): their words, added to their pages.
 GAME_TEST_WORDS = {'page:system': 'benchmark test messen stabilitat beta tests', 'page:picture': 'messen benchmark'}
 # The words of a question around what is meant ("where is", "how do i", "wie kann ich"): every word
@@ -340,7 +343,6 @@ class SearchMixin:
 
     def search_ready(self):
         """After every page is built: which page each setting is on, then the pages and the Help topics."""
-        import bbport_help
         titles = dict((name, _(*title)) for name, title in L.NAV_SIMPLE + L.NAV_EXPERT)
         titles['log'] = _('Log', 'Журнал')
         self.page_titles = titles

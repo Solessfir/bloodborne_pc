@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""The System page and the guided setup of the Windows launcher.
+"""The System page and the guided setup of the shared launcher.
 
 System & performance: the hardware check of bbport.de/install for this PC
 (bbport_hardware), what to expect at 1080p, 1440p and 4K, and the requirements. The guided
@@ -127,7 +127,7 @@ class SetupMixin:
                 self.rating_views.remove(view)  # its widgets are gone
 
     def display_size(self):
-        """The size of the monitor the game opens on (Picture & performance: Monitor)."""
+        """The selected monitor's size, used for output resolution and recommendations."""
         return self.game_monitor_size()
 
     def apply_settings(self, settings):
@@ -545,6 +545,10 @@ class SetupMixin:
         body.pack(fill='both', expand=True)
         self.bench, self.bench_rows, self.bench_folder = None, [], None
         tk.Label(body, text=_('Game tests'), bg=theme.CARD, fg=theme.GOLD_LIGHT, font=(theme.HEAD, 12)).pack(anchor='w')
+        if not bench.supported():
+            tk.Label(body, text=_(bench.unsupported_reason()), bg=theme.CARD, fg=theme.MUTED,
+                     font=(theme.BODY, 9), justify='left', wraplength=px(720)).pack(anchor='w')
+            return card
         tk.Label(body, text=_('The launcher starts the game from your last save, the same way every time, and measures '
                               'everything while it runs: frame rate, frame times, stutter, memory, processor and '
                               'graphics card load. It plays on a copy of your save in a folder of its own: your saves '
@@ -578,7 +582,7 @@ class SetupMixin:
         self.bench_start.pack(side='left')
         self.bench_cancel = ttk.Button(buttons, text=_('Cancel'), style='Card.TButton', command=self.cancel_benchmark)
         ttk.Button(buttons, text=_('Earlier tests'), style='Card.TButton',
-                   command=lambda: os.startfile(self.tests_dir()) if self.tests_dir().is_dir() else None).pack(
+                   command=lambda: self.open_path(self.tests_dir()) if self.tests_dir().is_dir() else None).pack(
             side='right')
         self.bench_list = tk.Frame(body, bg=theme.CARD)
         self.bench_list.pack(fill='x', pady=(px(10), 0))
@@ -713,6 +717,9 @@ class SetupMixin:
         from Picture & performance (view 'picture')."""
         import platform
         import time as clock
+        if not bench.supported():
+            self.messagebox.showinfo('Bloodborne', _(bench.unsupported_reason()))
+            return
         if self.update_installing():
             return
         if self.process or bench.game_pids():
@@ -877,7 +884,7 @@ class SetupMixin:
         ttk.Button(self.bench_apply, text=_('Save as zip'), style='Card.TButton', command=export).pack(
             side='left', padx=(px(8), 0), pady=(px(8), 0))
         ttk.Button(self.bench_apply, text=_('Open the folder'), style='Card.TButton',
-                   command=lambda: os.startfile(folder)).pack(side='left', padx=(px(8), 0), pady=(px(8), 0))
+                   command=lambda: self.open_path(folder)).pack(side='left', padx=(px(8), 0), pady=(px(8), 0))
 
     def benchmark_result(self, test, plan, results, folder):
         ttk, px = self.ttk, self.px
@@ -1503,15 +1510,22 @@ class SetupMixin:
             self.messagebox.showerror('Bloodborne', _('Could not copy the backup: {}').format(error))
 
     def show_backup(self, item):
+        if os.name != 'nt':
+            self.open_path(item.path.parent)
+            return
         import subprocess
         subprocess.Popen(['explorer', '/select,', str(item.path)])
 
     def delete_backup(self, item):
-        if not self.messagebox.askyesno('Bloodborne', _('Delete this backup? It goes to the Recycle Bin.') + '\n\n' +
+        question = ('Delete this backup? It goes to the Recycle Bin.' if os.name == 'nt'
+                    else 'Delete this backup? It goes to the Trash.')
+        if not self.messagebox.askyesno('Bloodborne', _(question) + '\n\n' +
                                         self.backup_title(item) + '  ·  ' + item.created.strftime('%d.%m.%Y %H:%M')):
             return
         if not saves.to_recycle_bin(item.path):
-            self.messagebox.showerror('Bloodborne', _('Could not move the backup to the Recycle Bin.'))
+            message = ('Could not move the backup to the Recycle Bin.' if os.name == 'nt'
+                       else 'Could not move the backup to the Trash. Install gio or use your file manager; the backup was kept.')
+            self.messagebox.showerror('Bloodborne', _(message))
         self.refresh_saves()
 
     # ---- small pieces ----------------------------------------------------------------------------
@@ -1795,15 +1809,17 @@ class SetupMixin:
                    _('Fullscreen takes the display over instead of covering the desktop: frames can arrive more evenly, '
                      'but switching to another window takes a moment. Only with Fullscreen on.'))
         self.row(f, _('Monitor'), self.choice(f, 'game_monitor', 'app', L.monitor_options(self.app.get('game_monitor'))),
-                 _('Where the game opens, in a window and in fullscreen.'))
+                 _('Where the game opens, in a window and in fullscreen.') if display.WINDOW_PLACEMENT_SUPPORTED else
+                 _('Used for output resolution. Your compositor controls which monitor the game opens on.'))
         self.row(f, _('Resolution'), self.output_choice(f),
                  _('The size of the picture. Your goal picks it for this PC; change it here if you like.'))
         self.row(f, _('Window size'), self.window_choice(f),
                  _('In a window: the size it opens at. You can still drag its edges; "As I left it" opens it at '
-                   'the size it had when you last closed the game.'))
+                   'the size it had when you last closed the game.') if display.WINDOW_PLACEMENT_SUPPORTED else None)
         self.check(f, 'hdr', 'app', _('Allow HDR output', 'Разрешить HDR'),
                    _('When HDR is on in Windows and the display supports it.',
-                     'Если HDR включён в Windows и монитор его поддерживает.'))
+                     'Если HDR включён в Windows и монитор его поддерживает.') if os.name == 'nt' else
+                   _('When HDR is enabled in your desktop session and the display supports it.'))
         self.section(f, _('Taste'))
         flags = {key: title for key, title, _on in L.EFFECTS}
         for key in L.TASTE_EFFECTS:
@@ -1818,6 +1834,11 @@ class SetupMixin:
         """The game window's size: the output resolution, as the player left it, or their own."""
         ttk = self.ttk
         holder = ttk.Frame(parent)
+        if not display.WINDOW_PLACEMENT_SUPPORTED:
+            ttk.Label(holder, text=_('Your compositor manages the game window size and placement.'),
+                      style='Muted.TLabel', wraplength=self.px(560)).pack(anchor='w')
+            holder.setting_key = 'window_size'
+            return holder
         mode, own = self.var('window_size', 'app'), self.var('window_custom', 'app')
         box = self.choice(holder, 'window_size', 'app', self.WINDOW_SIZES, width=30)
         box.pack(side='left')
@@ -1998,6 +2019,9 @@ class SetupMixin:
         build = sys.getwindowsversion().build if hasattr(sys, 'getwindowsversion') else 0
         yours['OS'] = (('ok', f'Windows {11 if build >= 22000 else 10}  ·  Build {build}') if build >= 18362 else
                        ('bad', f'Windows  ·  Build {build}'))
+        if os.name != 'nt':
+            import platform
+            yours['OS'] = ('ok', f'{platform.system()} {platform.release()}')
         if self.rating:
             checks = {part: state for state, part, _text in self.rating.checks}
             gpu = self.rating.gpu
@@ -2028,7 +2052,7 @@ class SetupMixin:
         if self.cpu:
             lines.append(f'CPU: {self.cpu.name} (score {self.cpu.score}, {self.cpu.support})')
         lines.append(f'RAM: {self.ram} GB')
-        lines.append(f'Windows: {platform.version()}')
+        lines.append(f'{platform.system()}: {platform.version()}')
         lines.append('Display: {} x {}'.format(*self.display_size()))
         if self.rating:
             r = hardware.assess(self.rating.gpu, self.cpu, self.ram)  # English texts
@@ -2460,7 +2484,8 @@ class SetupGuide:
         for state, text in (('ok', _('Your own Bloodborne game files (CUSA03173, Game of the Year Edition) '
                                      'with the 1.09 update.')),
                             ('ok', _('Windows 10 or 11 (64-bit) and a graphics card with Vulkan 1.3 and at least '
-                                     '4 GB of video memory.'))):
+                                     '4 GB of video memory.') if os.name == 'nt' else
+                             _('Linux (64-bit) and a graphics card with Vulkan 1.3 and at least 4 GB of video memory.'))):
             self.app.state_line(need, state, text, theme.CARD, wrap=660).pack(fill='x', pady=px(3))
 
     # -- II: check the game (and the PC) --
@@ -2860,7 +2885,8 @@ class SetupGuide:
         for text in (_('The first start takes longer and the first minutes can stutter while the shader cache is '
                        'built. That is normal.'),
                      _('In the game, Insert (keyboard) or L3 + R3 (controller) opens the port\'s menu.'),
-                     _('Next time, Play Bloodborne.exe starts the game straight away with these settings.')):
+                     _('Next time, Play Bloodborne.exe starts the game straight away with these settings.')
+                     if os.name == 'nt' else _('Next time, the Play Bloodborne shortcut starts the game with these settings.')):
             app.state_line(tips, 'info', text, theme.BG, wrap=720).pack(fill='x', pady=px(3))
 
     def res_card(self, parent, res, output, recommended):

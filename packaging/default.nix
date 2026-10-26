@@ -15,7 +15,7 @@ let
   assetDirs = [ "scripts" "patches" "fsr4_shaders" "launcher" ] ++ lib.optional fsr411 "fsr4_411";
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
-    "run.sh" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
+    "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
   ] ++ assetDirs;
   src = builtins.path {
     name = "bbport-src";
@@ -25,7 +25,7 @@ let
       in builtins.elem rel wanted
         || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs;
   };
-  python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
+  python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ps.tkinter ps.pillow ]);
   # Mesa comes with the package. bbport_vulkan.py adds the host NVIDIA ICD and
   # only its vendor libraries (matching the host's kernel module).
   icds = lib.concatMapStringsSep ":" (name: "${pkgs.mesa}/share/vulkan/icd.d/${name}")
@@ -77,7 +77,7 @@ pkgs.stdenv.mkDerivation {
     runHook preInstall
     d=$out/share/bbport
     mkdir -p $d/bin $out/bin
-    cp run.sh $d/
+    cp run.sh run.py $d/
     cp -r scripts patches fsr4_shaders launcher $d/
     # FSR 4.1.1 models only with BB_PACKAGE_FSR411=1 (see above); otherwise run.sh finds them in
     # the data directory (~/.local/share/bbport/fsr4_411).
@@ -116,7 +116,7 @@ pkgs.stdenv.mkDerivation {
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
     # The game alone, without the launcher (settings from the data directory's bbport.ini).
     makeShellWrapper ${pkgs.python3}/bin/python3 $out/bin/bbport-game \
-      ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
+      ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${python}/bin/python3 $out/share/bbport/launcher/bbport_launcher.py --play" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${pkgs.python3}/bin/python3 \
       --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \

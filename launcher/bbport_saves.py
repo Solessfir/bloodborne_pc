@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import struct
+import subprocess
 import time
 import zipfile
 from pathlib import Path
@@ -186,9 +187,10 @@ def label_for(folder):
         if any((install / name).exists() for name in ('Bloodborne Launcher.exe', 'BloodborneLauncher.exe')):
             profile = f' · {Path(folder).parts[parts.index("profiles") + 1]}' if 'profiles' in parts else ''
             return f"Awaken's port{profile}"
-        if (install / 'run.py').is_file() or (install / 'Bloodborne.exe').is_file():
+        if any((install / name).is_file() for name in ('run.py', 'Bloodborne.exe', 'run.sh')):
             return f'bbport ({install.name})'
-        if (install / 'shadPS4.exe').is_file() or (install.parent / 'shadPS4.exe').is_file():
+        if any((base / name).is_file() for base in (install, install.parent)
+               for name in ('shadPS4.exe', 'shadPS4')):
             return f'shadPS4 ({install.name})'
         return f'Backup ({install.name})'
     ancestor = next((q for q in Path(folder).parents
@@ -220,6 +222,19 @@ def sources(port_dir, game_dir=''):
             globs.append(Path(data) / 'saves' / SAVE_DIR)
     if local:
         globs.append(Path(local) / 'bbhost' / 'data' / 'saves' / SAVE_DIR)
+    if os.name != 'nt':
+        data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share'))
+        config = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
+        for shad in (data / 'shadPS4', config / 'shadPS4'):
+            globs += [shad / 'home' / '*' / 'savedata' / '*' / SAVE_DIR,
+                      shad / 'savedata' / '*' / '*' / SAVE_DIR]
+            home = (_json(shad / 'config.json').get('General') or {}).get('home_dir')
+            if home:
+                globs.append(Path(home) / '*' / 'savedata' / '*' / SAVE_DIR)
+            saved = _toml_value(shad / 'config.toml', 'GUI', 'saveDataPath')
+            if saved:
+                globs.append(Path(saved) / '*' / '*' / SAVE_DIR)
+        globs.append(data / 'bbhost' / 'data' / 'saves' / SAVE_DIR)
     if game_dir:
         globs.append(Path(game_dir) / 'data' / 'saves' / SAVE_DIR)  # bbhost beside the dump
     return [str(g) for g in globs]
@@ -640,8 +655,14 @@ def add_backup_file(path, user_dir):
 
 
 def to_recycle_bin(path):
-    """Moves a file to the Recycle Bin (Windows); True when it is gone from its folder."""
+    """Moves a file to the desktop trash; never deletes it permanently."""
     path = Path(path)
+    if os.name != 'nt':
+        try:
+            result = subprocess.run(['gio', 'trash', '--', str(path.absolute())], capture_output=True)
+            return result.returncode == 0 and not path.exists()
+        except OSError:
+            return False
     try:
         import ctypes
         from ctypes import wintypes

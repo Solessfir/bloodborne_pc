@@ -17,6 +17,14 @@ sys.path.insert(0,str(ROOT/'scripts'))
 import bbport_fg401 as fg
 import bbport_launcher_win as launcher
 
+
+def setUpModule():
+    for module in (launcher, fg):
+        fixture = patch.object(module, 'WINDOWS', True)
+        fixture.start()
+        unittest.addModuleCleanup(fixture.stop)
+
+
 class CapabilityTests(unittest.TestCase):
     def result(self,stdout,code=0):
         with patch.object(fg.Path, 'is_file', return_value=True), \

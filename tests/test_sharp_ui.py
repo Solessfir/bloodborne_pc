@@ -22,14 +22,14 @@ class UiViewportTests(unittest.TestCase):
     def test_the_output_size_above_1080p(self):
         self.assertEqual(ui_viewport((2560, 1440), SHARP), (2560, 1440))
         self.assertEqual(ui_viewport((3840, 2160), SHARP), (3840, 2160))
-        # 16:10: the 16:9 stage scaled to the width (Scaleform shows it whole).
-        self.assertEqual(ui_viewport((2560, 1600), SHARP), (2560, 1440))
 
     def test_never_below_1080p_nor_on_ultrawide(self):
         self.assertEqual(ui_viewport((1920, 1080), SHARP), OUTPUT_SIZE)
         self.assertEqual(ui_viewport((1280, 720), SHARP), OUTPUT_SIZE)  # the Steam Deck keeps 1080 lines
         # An ultrawide output keeps its widened HUD canvas (its writes stay ultrawide_writes').
         self.assertEqual(ui_viewport((3440, 1440), SHARP), (2580, 1080))
+        # 16:10 keeps its own 1920x1200 HUD canvas and aspect patches.
+        self.assertEqual(ui_viewport((2560, 1600), SHARP), (1920, 1200))
 
     def test_the_resolution_patch_gets_the_viewport(self):
         writes = dict(resolution_writes(XML, (1706, 960), '01.09', SEGMENTS, ui_viewport((2560, 1440), SHARP)))

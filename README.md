@@ -151,6 +151,20 @@ See [packaging/windows/README.md](packaging/windows/README.md): MSYS2 CLANG64, `
 then `bash packaging/windows/package.sh`. DLSS is built separately with
 `packaging/windows/build_dlss.sh` (needs Visual Studio 2022).
 
+Windows and Linux use the same launcher UI and settings pages. On CachyOS/Arch, install its
+dependencies with `sudo pacman -S --needed tk python-pillow`, then run `bash launcher/bb-launcher.sh`.
+Add `--play` to start directly with saved settings. Existing Linux profiles are reused from
+`$XDG_CONFIG_HOME/bbport-launcher` (default `~/.config/bbport-launcher`). Logs are saved in the
+selected saves folder as `last_run.log`.
+
+The game hides and captures the pointer while focused, including controller play. Opening the
+overlay or a text dialog, or switching to another window, releases it. F7 toggles mouse-look only.
+
+Linux supports native DLSS Super Resolution/DLAA, portable FSR upscalers and FSR 3.1 frame generation.
+Windows-only DLSS frame generation, ML-FG, DX12 and automated benchmarks are unavailable on Linux.
+Window placement belongs to the Linux compositor. The Linux launcher never installs Windows
+release packages; Linux builds are updated from source.
+
 Linux: `bash build.sh`. Optional native DLSS Super Resolution and DLAA need an NVIDIA RTX GPU
 and a checkout of the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS):
 

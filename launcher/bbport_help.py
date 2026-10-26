@@ -277,6 +277,34 @@ TOPIC_ACTIONS = {'black_screen': [('Clear the shader cache', 'clear_cache')],
                  'shadnet_rejected': [('Open Online play', 'open_online_page')]}
 TOPIC_ORDER += [key for key in TOPICS if key not in TOPIC_ORDER]  # topics added later: at the end
 
+if os.name != 'nt':
+    TOPICS['page_file'] = (
+        'The system has too little memory for the start',
+        'The game reserves about 6 GB at its start (10 GB at 1440p and 4K). Available RAM, swap and '
+        'the system memory limits determine whether that allocation succeeds.',
+        ['Close browsers and other large programs before playing.',
+         'Check available RAM and swap with your system monitor or the free -h command.',
+         'If memory is still too low, configure swap using your distribution\'s documentation.'])
+    TOPICS['antivirus'] = (
+        'The port cannot access its files',
+        'The launcher needs to read and write files in the port folder and its data folders.',
+        ['Keep the port in a writable folder owned by your account.',
+         'Check the log for the path that cannot be accessed and check its permissions.',
+         'If security software blocked a file, review that software\'s logs.'])
+    TOPICS['location'] = (
+        'The port is in a synced or protected folder',
+        'Sync services can move files while the port writes them; system folders may be read only.',
+        ['Move the whole port folder to a writable local folder owned by your account.'])
+    TOPICS['driver'] = (
+        TOPICS['driver'][0], TOPICS['driver'][1],
+        ['Update the graphics driver using your distribution\'s package manager.',
+         'Restart the PC after installing it.',
+         'Overclocked graphics card or memory: try the standard clocks.'])
+    TOPICS.pop('smartscreen')
+    TOPIC_ORDER.remove('smartscreen')
+    TOPIC_ACTIONS.pop('page_file')
+    TOPIC_ACTIONS.pop('antivirus')
+
 # The game's and run.py's messages that name the cause of a failed start or crash.
 LOG_HINTS = [
     (r'of guest memory|page file is too small|commit limit', 'page_file'),
@@ -531,7 +559,16 @@ class MEMORYSTATUSEX(ctypes.Structure):
 
 
 def memory_status():
-    """(free for programs now, limit, RAM) in GB: Windows' commit charge, RAM and page file together."""
+    """(available, total, RAM) in GB: Windows commit memory, or Linux RAM plus swap."""
+    if os.name != 'nt':
+        try:
+            values = {key: int(value.split()[0]) for key, value in
+                      (line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())}
+            ram, swap = values['MemTotal'], values.get('SwapTotal', 0)
+            free = values['MemAvailable'] + values.get('SwapFree', 0)
+            return free / 1024 ** 2, (ram + swap) / 1024 ** 2, ram / 1024 ** 2
+        except (OSError, ValueError, KeyError):
+            return None
     status = MEMORYSTATUSEX()
     status.dwLength = ctypes.sizeof(status)
     try:
@@ -681,11 +718,13 @@ def run_checks(game_dir, mods_dir, port_dir, output_res, cached=None):
     status = memory_status()
     if memory:
         free, need, off = memory
-        checks.append(('warn', 'page_file', (_('The page file is off: ') if off else '') + _(
+        label = 'The page file is off: ' if os.name == 'nt' else 'Little or no swap is available: '
+        checks.append(('warn', 'page_file', (_(label) if off else '') + _(
             'only {} GB are free for the game\'s start right now, it reserves about {} GB.').format(number(free, 1), need)))
     elif status:
-        checks.append(('ok', None, _('Memory for the start: {} GB free (RAM and page file), about {} GB '
-                                     'needed.').format(number(status[0], 1), memory_needed(output_res))))
+        label = ('Memory for the start: {} GB free (RAM and page file), about {} GB needed.' if os.name == 'nt'
+                 else 'Memory for the start: {} GB available (RAM and swap), about {} GB needed.')
+        checks.append(('ok', None, _(label).format(number(status[0], 1), memory_needed(output_res))))
     version, differ = files_check(port_dir)
     if differ:
         checks.append(('bad', 'mixed_versions', _('Files of different versions in this installation: {}.').format(files_text(differ))))
@@ -758,11 +797,11 @@ class HelpMixin:
         versions = tk.Frame(card, bg=theme.CARD)
         versions.pack(fill='x', pady=(px(8), 0))
         button = ttk.Button(versions, text=_('Check for updates', 'Проверить обновления'), style='Card.TButton',
-                            command=self.check_update_now)
+                            command=self.check_update_now, state='normal' if os.name == 'nt' else 'disabled')
         button.pack(side='left')
         self.index_entry(button, _('Check for updates', 'Проверить обновления'), key='button:updates')
         button = ttk.Button(versions, text=_('Other versions…', 'Другие версии…'), style='Card.TButton',
-                            command=self.choose_version)
+                            command=self.choose_version, state='normal' if os.name == 'nt' else 'disabled')
         button.pack(side='left', padx=(px(8), 0))
         self.index_entry(button, _('Other versions…', 'Другие версии…'), key='button:versions')
         tk.Label(versions, text=_('Installed: v{}', 'Установлена: v{}').format(L.VERSION_TEXT),
@@ -935,6 +974,8 @@ class HelpMixin:
         webbrowser.open(VC_REDIST)
 
     def open_firewall_settings(self):
+        if os.name != 'nt':
+            return
         os.startfile('wf.msc')  # Windows Defender Firewall with Advanced Security
 
     def check_game_files(self):
@@ -979,6 +1020,8 @@ class HelpMixin:
         threading.Thread(target=work, daemon=True).start()
 
     def open_memory_settings(self):
+        if os.name != 'nt':
+            return
         import subprocess
         subprocess.Popen(['SystemPropertiesAdvanced.exe'])  # Advanced > Performance > Virtual memory
 
@@ -993,6 +1036,8 @@ class HelpMixin:
         self.help_check()
 
     def open_windows_security(self):
+        if os.name != 'nt':
+            return
         try:
             os.startfile('windowsdefender://threatsettings/')
         except OSError:

@@ -8,6 +8,8 @@ smooth at every display scale. ttk blends an image's transparent pixels with the
 background, so every style that sits on a card has a Card. twin with the card's colour.
 """
 import ctypes
+import ctypes.util
+import os
 import sys
 from pathlib import Path
 
@@ -53,19 +55,44 @@ def load_fonts(root):
     """Registers the bundled fonts for this process only and picks the families Tk sees."""
     global HEAD, HEAD_BOLD, BODY, BODY_MEDIUM, BODY_SEMI, ICONS
     import tkinter.font as tkfont
-    for path in sorted((ASSETS / 'fonts').glob('*.ttf')):
+    fonts = sorted((ASSETS / 'fonts').glob('*.ttf'))
+    if os.name != 'nt':
         try:
-            ctypes.windll.gdi32.AddFontResourceExW(str(path), 0x10, 0)  # FR_PRIVATE
+            fontconfig = ctypes.CDLL(ctypes.util.find_library('fontconfig') or 'libfontconfig.so.1')
+            fontconfig.FcConfigGetCurrent.restype = ctypes.c_void_p
+            fontconfig.FcConfigAppFontAddFile.argtypes = (ctypes.c_void_p, ctypes.c_char_p)
+            fontconfig.FcConfigAppFontAddFile.restype = ctypes.c_int
+            config = fontconfig.FcConfigGetCurrent()
+            for path in fonts:
+                fontconfig.FcConfigAppFontAddFile(config, os.fsencode(path))
         except (AttributeError, OSError):
             pass
+    else:
+        for path in fonts:
+            try:
+                ctypes.windll.gdi32.AddFontResourceExW(str(path), 0x10, 0)  # FR_PRIVATE
+            except (AttributeError, OSError):
+                pass
     families = set(tkfont.families(root))
     pick = lambda *names: next((n for n in names if n in families), names[-1])
-    HEAD = pick('Cinzel SemiBold', 'Georgia')
-    HEAD_BOLD = pick('Cinzel Bold', 'Cinzel SemiBold', 'Georgia')
-    BODY = pick('Inter', 'Segoe UI')
-    BODY_MEDIUM = pick('Inter Medium', 'Inter', 'Segoe UI')
-    BODY_SEMI = pick('Inter SemiBold', 'Inter', 'Segoe UI Semibold')
-    ICONS = pick('Segoe Fluent Icons', 'Segoe MDL2 Assets')
+    if os.name == 'nt':
+        HEAD = pick('Cinzel SemiBold', 'Georgia')
+        HEAD_BOLD = pick('Cinzel Bold', 'Cinzel SemiBold', 'Georgia')
+        BODY = pick('Inter', 'Segoe UI')
+        BODY_MEDIUM = pick('Inter Medium', 'Inter', 'Segoe UI')
+        BODY_SEMI = pick('Inter SemiBold', 'Inter', 'Segoe UI Semibold')
+        ICONS = pick('Segoe Fluent Icons', 'Segoe MDL2 Assets')
+    else:
+        HEAD = pick('Cinzel SemiBold', 'Cinzel', 'DejaVu Serif', 'serif')
+        HEAD_BOLD = pick('Cinzel Bold', 'Cinzel', 'DejaVu Serif', 'serif')
+        BODY = pick('Inter', 'DejaVu Sans', 'sans-serif')
+        BODY_MEDIUM = pick('Inter Medium', 'Inter', 'DejaVu Sans', 'sans-serif')
+        BODY_SEMI = pick('Inter SemiBold', 'Inter', 'DejaVu Sans', 'sans-serif')
+        ICONS = pick('DejaVu Sans', 'sans-serif')
+        ICON.update(play='▶', graphics='▦', display='▣', game='♟', cheats='⚒', online='◎',
+                    mods='▤', trophies='★', controls='✥', advanced='⚙', log='≡', ok='✓', warn='⚠',
+                    error='✕', info='ⓘ', keyboard='⌨', link='↗', system='▣', folder='▱', cpu='▦',
+                    ram='▤', pulse='∿', help='?', picture='▧', saves='↓', language='文', gameplay='⚔')
 
 
 # ---- drawing --------------------------------------------------------------------------------

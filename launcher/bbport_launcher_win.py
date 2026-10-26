@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Bloodborne launcher for Windows (Tkinter; launcher/bbport_launcher.py is the Linux one).
+"""Shared Bloodborne launcher for Windows and Linux (Tkinter).
 
 Every setting of the port in one window: the game folder and saves, bbport.ini (upscaler,
 preset, output, effects), start-up options passed to run.py as environment variables
 (frame rate, presentation, HDR, ...), mods, third-party patches and the FSR 4 assets.
-Launcher options live in %APPDATA%/bbport-launcher/settings.json.
+Launcher options live in %APPDATA%/bbport-launcher on Windows and
+$XDG_CONFIG_HOME/bbport-launcher (default ~/.config/bbport-launcher) on Linux.
 
 Frozen with PyInstaller (packaging/windows/package.sh) the same Bloodborne.exe also runs the
 game without the window (`--play`), run.py (`--run`) and the preparation scripts (`--script`),
@@ -14,12 +15,14 @@ so a packaged port needs no Python installation.
 import ctypes
 import gc
 import json
+import locale
 import os
 from pathlib import Path
 import queue
 import re
 import runpy
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -29,6 +32,7 @@ import urllib.request
 import webbrowser
 import zipfile
 
+WINDOWS = os.name == 'nt'
 FROZEN = getattr(sys, 'frozen', False)
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
@@ -36,7 +40,8 @@ import fetch_fsr4vk
 DATA_DIR = Path(os.environ.get('BB_DATA_DIR', PORT_DIR))
 # Co-op test build: its own settings, and no updates (a public release would replace it).
 COOP_TEST = False
-CONFIG_DIR = Path(os.environ.get('APPDATA', Path.home())) / ('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')
+CONFIG_HOME = Path(os.environ.get('APPDATA', Path.home())) if WINDOWS else Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
+CONFIG_DIR = CONFIG_HOME / ('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')
 CONFIG_FILE = CONFIG_DIR / 'settings.json'
 PATCH_VERSION = '01.09'
 MAX_LOG_LINES = 6000
@@ -82,6 +87,8 @@ ASSET_DIGESTS = {}
 
 def attach_stdio():
     """A windowed executable starts without sys.stdout; inherited pipes or a console still exist."""
+    if not WINDOWS:
+        return
     import msvcrt
     for name, std in (('stdout', -11), ('stderr', -12)):
         if getattr(sys, name) is not None:
@@ -147,13 +154,27 @@ ONE_LAUNCHER = 'Local\\bbport-launcher'
 TO_FRONT = 'Local\\bbport-launcher-front'
 
 
+def lock_path(name):
+    """Linux's stand-in for a named mutex: a file its holder keeps an flock on (run.py game_lock_path)."""
+    base = name.rpartition('\\')[2]
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or tempfile.gettempdir()) / f'{base}-{os.getuid()}.lock'
+
+
 def one_launcher(name=ONE_LAUNCHER, front=TO_FRONT):
     """True for the first launcher window (it holds a named mutex while it runs); a second start asks that one to
     come to the front (bring_to_front_on_request) and gets False."""
+    global _ONE_LAUNCHER_HANDLE
+    if not WINDOWS:
+        import fcntl
+        _ONE_LAUNCHER_HANDLE = open(lock_path(name), 'a')
+        try:
+            fcntl.flock(_ONE_LAUNCHER_HANDLE, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
     from ctypes import wintypes
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateMutexW.restype = kernel.OpenEventW.restype = wintypes.HANDLE
-    global _ONE_LAUNCHER_HANDLE
     _ONE_LAUNCHER_HANDLE = kernel.CreateMutexW(None, False, name)
     if ctypes.get_last_error() != 183:  # ERROR_ALREADY_EXISTS
         return True
@@ -166,6 +187,8 @@ def one_launcher(name=ONE_LAUNCHER, front=TO_FRONT):
 
 def bring_to_front_on_request(on_request, front=TO_FRONT):
     """Calls on_request (from a helper thread) each time another start asks for the open window."""
+    if not WINDOWS:
+        return None  # ponytail: a second Linux start just exits; a socket could raise the open window
     from ctypes import wintypes
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateEventW.restype = wintypes.HANDLE
@@ -182,6 +205,15 @@ def bring_to_front_on_request(on_request, front=TO_FRONT):
 
 def wait_for_exit(pid, seconds=15):
     """--after PID: the launcher this one replaces (Apply restarts it) closes first, with its window."""
+    if not WINDOWS:
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            try:
+                os.kill(int(pid), 0)
+            except OSError:
+                return
+            time.sleep(0.1)
+        return
     kernel = ctypes.windll.kernel32
     handle = kernel.OpenProcess(0x00100000, False, int(pid))  # SYNCHRONIZE
     if handle:
@@ -196,6 +228,16 @@ GAME_MUTEX = 'Local\\bbport-game'
 def game_underway(mutex=GAME_MUTEX):
     """Whether a game is being prepared or runs: from this launcher, Play Bloodborne.exe (Steam, a shortcut) or
     the in-game restart. A second one would share its saves and prepared files."""
+    if not WINDOWS:
+        import fcntl
+        try:
+            with open(lock_path(GAME_MUTEX), 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            pass
+        return bool(bench.game_pids())
     kernel = ctypes.windll.kernel32
     kernel.OpenMutexW.restype = ctypes.c_void_p
     handle = kernel.OpenMutexW(0x00100000, False, mutex)  # SYNCHRONIZE
@@ -208,6 +250,8 @@ def game_underway(mutex=GAME_MUTEX):
 def front_game_window():
     """The running game's window to the front (restored when minimized); False when it has none yet (still
     being prepared)."""
+    if not WINDOWS:
+        return False  # the compositor decides which window is in front
     user32 = ctypes.windll.user32
     for pid in bench.game_pids():
         hwnd = bench.game_window(pid)
@@ -312,6 +356,9 @@ def renamed(text):
 
 
 def windows_language():
+    if not WINDOWS:
+        language = (locale.getlocale()[0] or os.environ.get('LANG', 'en')).split('_')[0].split('.')[0]
+        return language if language in {key for key, _ in bbport_lang.LANGUAGE_NAMES} else 'en'
     try:
         primary = ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3ff
     except (AttributeError, OSError):
@@ -384,7 +431,7 @@ INI_DEFAULTS = {'upscaler': 'fsr3', 'preset': '1', 'sharpen': '1', 'sharpness': 
                 'button_prompts': 'auto',
                 'frame_gen': 'off', 'frame_gen_multiplier': '2', 'frame_gen_fit_display': '0',
                 **{key: '1' if on else '0' for key, _t, on in EFFECTS + EXTRAS + CHEATS + TWEAKS}}
-APP_DEFAULTS = {'ui_language': '', 'game_dir': str(PORT_DIR.parent / 'CUSA03173'), 'user_dir': '', 'cache_dir': '',
+APP_DEFAULTS = {'ui_language': '', 'game_dir': str(PORT_DIR / 'game' if (PORT_DIR / 'game/eboot.bin').is_file() else PORT_DIR.parent / 'CUSA03173'), 'user_dir': '', 'cache_dir': '',
                 'dlc_dir': '',
                 'mods_dir': '', 'mods_enabled': True, 'patches_dir': '', 'language': '1',
                 'voice_language': 'auto',
@@ -394,7 +441,7 @@ APP_DEFAULTS = {'ui_language': '', 'game_dir': str(PORT_DIR.parent / 'CUSA03173'
                 'vk_validation': False, 'extra_env': '', 'close_on_play': False,
                 'on_play': 'stay', 'reopen_after_game': False, 'minimize_to_tray': False, 'discord_status': True,
                 'menu_key': 'Insert', 'menu_pad': 'l3+r3',
-                'check_updates': True, 'save_backups': False, 'online': False, 'online_server': 'srv.shadps4.net:31313',
+                'check_updates': WINDOWS, 'mangohud': False, 'save_backups': False, 'online': False, 'online_server': 'srv.shadps4.net:31313',
                 'online_webapi': '', 'online_npid': '', 'online_password': '', 'online_upnp': True,
                 'online_custom_servers': False, 'supermedo_npid': '', 'supermedo_pass': '',
                 'online_community': COMMUNITY_SERVER, 'online_pool': 'supermedo', 'bridge_live_map': False,
@@ -455,7 +502,9 @@ FRAME_GEN_MULTIPLIERS = [('2', ('2× (one generated frame)', '2× (один ка
                          ('4', ('4× (DLSS on GeForce RTX 50)', '4× (DLSS на GeForce RTX 50)'))]
 PRESETS = [('0', ('Native AA (×1.0)',)), ('1', ('Quality (×1.5)',)), ('2', ('Balanced (×1.7)',)),
            ('3', ('Performance (×2)',)), ('4', ('Ultra Performance (×3)',))]
-FSR411_BACKENDS = [('vk', ('Vulkan (fsr4vk)',)), ('dx12', ('AMD DX12',))]
+if not WINDOWS:
+    FRAME_GEN_MULTIPLIERS = FRAME_GEN_MULTIPLIERS[:1]
+FSR411_BACKENDS = [('vk', ('Vulkan (fsr4vk)',)), ('dx12', ('AMD DX12',))] if WINDOWS else [('vk', ('Vulkan (portable shaders)',))]
 SHARED_GRAPHICS_KEYS = ('fsr411_backend', 'object_motion_cache')
 # Launcher settings the game's PC Settings page also changes (bbport_pc_menu.cpp): kept in
 # settings.json as before and mirrored to bbport.ini, where the newer value is.
@@ -469,7 +518,7 @@ def mirrored(app, ini):
 
 def fsr411_backend(settings):
     # The persisted value is independent of the translated display label.
-    return 'dx12' if settings.get('fsr411_backend') == 'dx12' else 'vk'
+    return 'dx12' if WINDOWS and settings.get('fsr411_backend') == 'dx12' else 'vk'
 
 
 def native_fsr411_present():
@@ -644,6 +693,20 @@ def ini_repairs(values):
         if good != value:
             fixed[key] = good
     return fixed
+
+
+def load_profile():
+    settings = load_settings()
+    if not WINDOWS and 'frame_cap' not in settings:
+        settings['frame_cap'] = str(settings['fps_limit']) if settings.get('fps_limit') else ''
+        if settings.get('game_dir'):
+            settings.setdefault('setup_done', True)
+            settings.setdefault('auto_graphics', False)
+    return settings
+
+
+def game_process_options():
+    return {'creationflags': NO_WINDOW} if WINDOWS else {'start_new_session': True}
 
 
 def load_ini(legacy_settings=None):
@@ -1307,6 +1370,10 @@ def game_environment(s, graphics=None):
     graphics = graphics if graphics is not None else load_ini(s)[0]
     env['BB_UI_LANGUAGE'] = s.get('ui_language') or LANG
     env['BB_GAME_DIR'] = s['game_dir']
+    if not WINDOWS:
+        env['BB_PREBUILT'] = '1'
+        if s.get('mangohud'):
+            env['MANGOHUD'] = '1'
     if s['user_dir']:
         env['BB_USER_DIR'] = s['user_dir']
     if cache_folder(s) != saves_folder(s):
@@ -1451,7 +1518,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
     def __init__(self, root, tk, ttk, filedialog, messagebox):
         self.tk, self.ttk, self.filedialog, self.messagebox = tk, ttk, filedialog, messagebox
         self.root = root
-        saved = load_settings()
+        saved = load_profile()
         self.app = {**APP_DEFAULTS, **saved}
         if 'thehuntersdream' in str(self.app.get('online_community', '')):  # the game server is supermedo.com's
             self.app['online_community'] = COMMUNITY_SERVER
@@ -1538,7 +1605,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         root.after(3000, self.poll_hunters)
         root.after(800, self.temporary_warning)
         threading.Thread(target=self.detect_gpu, daemon=True).start()
-        if self.app.get('check_updates', True) and not COOP_TEST:
+        if WINDOWS and self.app.get('check_updates', True) and not COOP_TEST:
             threading.Thread(target=self.check_update, daemon=True).start()
 
     def temporary_warning(self):
@@ -1678,7 +1745,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             def ready(value):
                 status = bbport_fg401.status_for(self.fg401_support, value)
                 return bool(status and status.get('supported'))
-            options = [(v,t) for v,t in FRAME_GENERATION if v not in ('fsr401','fsr402') or ready(v)]
+            options = [(v,t) for v,t in FRAME_GENERATION
+                       if (v not in ('fsr401','fsr402') or ready(v)) and (WINDOWS or v!='dlss')]
             values[:] = [v for v,t in options]
             box.configure(values=[_(*t) for v,t in options])
             if var.get() in ('fsr401','fsr402') and not ready(var.get()):
@@ -2058,7 +2126,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
     def build(self):
         tk, ttk, px = self.tk, self.ttk, self.px
         self.custom_frame = None  # bbport_frame.Frame once installed (window_chrome), False if it failed
-        self.titlebar = None if self.app.get('windows_title_bar') else self.build_titlebar()
+        self.titlebar = None if not WINDOWS or self.app.get('windows_title_bar') else self.build_titlebar()
         self.root.bind('<Map>', self.restored, add='+')
         self.root.bind('<Unmap>', self.minimized, add='+')
         side = tk.Frame(self.root, bg=BG, width=px(248))
@@ -2219,6 +2287,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         self.search_ready()
         self.show_goal()
         self.root.bind_all('<MouseWheel>', self.wheel)
+        if not WINDOWS:
+            self.root.bind_all('<Button-4>', self.wheel)
+            self.root.bind_all('<Button-5>', self.wheel)
         self.root.bind_class('TCombobox', '<MouseWheel>', self.combobox_wheel)
         self.refresh_status()
 
@@ -2376,6 +2447,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         what lies behind it); the whole window very slightly translucent when chosen (Launcher customization,
         Advanced). Off by default: a dark window lets bright windows behind it show through clearly."""
         translucent = bool(self.app.get('translucent_window', False))
+        if not WINDOWS:
+            self.root.attributes('-alpha', 0.985 if translucent else 1.0)
+            return
         try:
             hwnd = int(self.root.wm_frame(), 16)
             if hwnd == self.root.winfo_id() and getattr(self, 'chrome_waits', 0) < 100:
@@ -2438,7 +2512,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         page = self.pages.get(self.current_page)
         if not hasattr(page, 'scroll') or isinstance(event.widget, self.tk.Text) or 'popdown' in str(event.widget):
             return
-        self.wheel_pixels = getattr(self, 'wheel_pixels', 0.0) - event.delta / 120 * self.px(64)
+        delta = 120 if getattr(event, 'num', None) == 4 else -120 if getattr(event, 'num', None) == 5 else event.delta
+        self.wheel_pixels = getattr(self, 'wheel_pixels', 0.0) - delta / 120 * self.px(64)
         if not getattr(self, 'wheel_pending', None):
             self.wheel_pending = self.root.after_idle(self.flush_wheel)
 
@@ -3100,13 +3175,14 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                  _('Closed, it ends with the game; minimized, it waits on the task bar (or in the tray).'))
         self.check(f, 'reopen_after_game', 'app', _('Open the launcher again when the game closes'),
                    _('After a crash it always comes back, with the log.'))
-        if DISCORD_APPLICATION_ID:  # without the port's Discord application there is nothing to show
+        if DISCORD_APPLICATION_ID and WINDOWS:  # without the port's Discord application there is nothing to show
             self.check(f, 'discord_status', 'app', _("Show what I'm playing on Discord"),
                        _('Your area, the boss you fight and your level on your Discord profile, while the Discord '
                          'app runs.'))
-        self.check(f, 'minimize_to_tray', 'app', _('Minimize to the system tray'),
-                   _('Minimized, the launcher leaves the task bar for an icon next to the clock: click it to '
-                     'open the launcher again.'))
+        if bbport_tray.AVAILABLE:
+            self.check(f, 'minimize_to_tray', 'app', _('Minimize to the system tray'),
+                       _('Minimized, the launcher leaves the task bar for an icon next to the clock: click it to '
+                         'open the launcher again.'))
         self.section(f, _('Shortcuts'))
         shortcuts = ttk.Frame(f)
         button = ttk.Button(shortcuts, text=_('Desktop shortcut', 'Ярлык на рабочем столе'), command=self.shortcut)
@@ -4504,8 +4580,11 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                                _('Launcher options, performance switches and diagnostics.',
                                  'Настройки лаунчера, производительность и диагностика.'))
         self.section(f, _('Launcher', 'Лаунчер'), top=4)
-        self.check(f, 'check_updates', 'app', _('Check for updates when the launcher opens',
-                                                'Проверять обновления при открытии лаунчера'))
+        if WINDOWS:
+            self.check(f, 'check_updates', 'app', _('Check for updates when the launcher opens',
+                                                    'Проверять обновления при открытии лаунчера'))
+        else:
+            self.note(f, _('Linux builds are updated from the source checkout.'), top=0)
         holder = ttk.Frame(f)
         holder.grid(row=self.next_row(f), column=0, columnspan=2, sticky='w', pady=(10, 0))
         button = ttk.Button(holder, text=_('Port folder', 'Папка порта'), command=lambda: self.open_path(DATA_DIR))
@@ -4519,9 +4598,14 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         # search finds them there, a page of both views), the shader cache also in Help's black screen topic.
         holder = ttk.Frame(f)
         holder.grid(row=self.next_row(f), column=0, columnspan=2, sticky='w', pady=(10, 0))
-        ttk.Button(holder, text=_('Check for updates', 'Проверить обновления'), command=self.check_update_now).pack(
-            side='left')
-        ttk.Button(holder, text=_('Other versions…', 'Другие версии…'), command=self.choose_version).pack(
+        self.updates_button = ttk.Button(
+            holder, text=_('Check for updates', 'Проверить обновления'),
+            command=self.check_update_now)
+        self.updates_button.pack(side='left')
+        if not WINDOWS:
+            self.updates_button.configure(state='disabled')
+        ttk.Button(holder, text=_('Other versions…', 'Другие версии…'), command=self.choose_version,
+                   state='normal' if WINDOWS else 'disabled').pack(
             side='left', padx=(6, 0))
         ttk.Label(holder, text=f'v{VERSION_TEXT}', style='Muted.TLabel').pack(side='left', padx=10)
         holder = ttk.Frame(f)
@@ -4532,8 +4616,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         self.wrap_within(ttk.Label(holder, text=hint, style='Muted.TLabel', justify='left', anchor='w'), 560).pack(
             side='left', fill='x', expand=True, padx=10)
         self.section(f, _('Appearance'))  # the translucent window: Launcher customization > Launcher
-        self.check(f, 'windows_title_bar', 'app', _("Windows' title bar instead of the launcher's own"),
-                   _('Applies when the launcher opens again.', 'Применится при следующем открытии лаунчера.'))
+        if WINDOWS:
+            self.check(f, 'windows_title_bar', 'app', _("Windows' title bar instead of the launcher's own"),
+                       _('Applies when the launcher opens again.', 'Применится при следующем открытии лаунчера.'))
         self.var('windows_title_bar', 'app').trace_add('write', lambda *_a: self.app.__setitem__(
             'windows_title_bar', self.var('windows_title_bar', 'app').get()))
         self.section(f, _('Performance', 'Производительность'))
@@ -4559,6 +4644,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                   style='Muted.TLabel').grid(row=self.next_row(f), column=0, columnspan=2, sticky='w', pady=(8, 0))
         self.section(f, _('Diagnostics', 'Для разработчика'))
         self.check(f, 'frame_stats', 'app', _('Frame statistics in the log (every 5 s)', 'Статистика кадров в журнале (раз в 5 с)'))
+        if not WINDOWS:
+            self.check(f, 'mangohud', 'app', 'MangoHud', _('Show the MangoHud performance overlay when installed.'))
         self.check(f, 'gpu_profile', 'app', _('GPU time per pass in the log', 'Профиль GPU в журнале'))
         self.check(f, 'vk_validation', 'app', _('Vulkan validation layers (needs the Vulkan SDK; much slower)',
                                                 'Слои валидации Vulkan (нужен Vulkan SDK; сильно замедляет)'))
@@ -4568,7 +4655,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         # itself with the player's settings and gives one zip to send.
         holder = ttk.Frame(f)
         holder.grid(row=self.next_row(f), column=0, columnspan=2, sticky='we', pady=(10, 0))
-        ttk.Button(holder, text=_('Benchmark for bug reports…'), command=self.open_bug_benchmark).pack(side='left')
+        ttk.Button(holder, text=_('Benchmark for bug reports…'), command=self.open_bug_benchmark,
+                   state='normal' if WINDOWS else 'disabled').pack(side='left')
         self.wrap_within(ttk.Label(holder, text=_('A fixed route in Cathedral Ward for testers: one zip to send.'),
                                    style='Muted.TLabel', justify='left', anchor='w'), 560).pack(
             side='left', fill='x', expand=True, padx=10)
@@ -4590,6 +4678,9 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         import bbport_benchmark as bench
         title = _('Benchmark for bug reports…').rstrip('…')
         if self.update_installing():
+            return
+        if not bench.supported():
+            self.messagebox.showinfo(title, bench.unsupported_reason())
             return
         if self.process or bench.game_pids():
             self.messagebox.showinfo(title, _('Close the game first.'))
@@ -4914,15 +5005,16 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             self.ui_calls.put(self.refresh_fg401)
 
     def detect_hardware(self):
-        exe = PORT_DIR / 'bin' / 'bb-gpu-capabilities.exe'
+        name = 'bb-gpu-capabilities.exe' if WINDOWS else 'bb-gpu-capabilities'
+        exe = PORT_DIR / 'bin' / name
         if not exe.is_file():
-            exe = PORT_DIR / 'out' / 'bb-gpu-capabilities.exe'
+            exe = PORT_DIR / 'out' / name
         env = dict(os.environ)
         for item in str(self.app.get('extra_env', '')).split():
             if '=' in item:
                 key, value = item.split('=', 1)
                 env[key] = value
-        if not (exe.parent / 'SDL3.dll').is_file():
+        if WINDOWS and not (exe.parent / 'SDL3.dll').is_file():
             clang64 = Path(os.environ.get('MSYS2_ROOT', r'C:\msys64')) / 'clang64' / 'bin'
             env['PATH'] = f'{clang64}{os.pathsep}{env.get("PATH", "")}'
         text = _('• Graphics card: not checked', '• Видеокарта: не проверена')
@@ -4971,7 +5063,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
     def fsr411_status(self, method):
         return bbport_fsr411.method_status(PORT_DIR, DATA_DIR, method,
             getattr(self, 'fsr411_support', None), fetch_fsr4vk,
-            bbport_fsr411.environment(PORT_DIR, self.app))
+            bbport_fsr411.environment(PORT_DIR, self.app),
+            output_res=self.var('output_res', 'ini').get(), preset=self.var('preset', 'ini').get())
 
     def fsr41_status(self, method):
         if self.var('upscaler', 'ini').get() == 'fsr412':
@@ -5001,6 +5094,15 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         threading.Thread(target=work, daemon=True).start()
 
     def refresh_fsr411(self):
+        if not WINDOWS:
+            self.fsr411_label.configure(text=_('Vulkan (portable shaders)') + ': ' +
+                bbport_fsr411.message(self.fsr411_status('vk'), _))
+            self.fsr411_native_label.configure(text='')
+            self.fsr411_button.configure(state='disabled')
+            self.fsr411_progress.pack_forget()
+            for refresh in getattr(self, 'fsr411_refreshers', []) + getattr(self, 'fsr411_upscaler_refreshers', []):
+                refresh()
+            return
         folder = self.fsr411_folder()
         installed = fetch_fsr4vk.files_ok(folder)
         self.fsr411_verified = installed
@@ -5024,7 +5126,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             self.fsr411_progress.pack_forget()
 
     def download_fsr411(self, on_success=None):
-        if self.process or self.fsr411_downloading:
+        if not WINDOWS or self.process or self.fsr411_downloading:
             return
         self.fsr411_downloading = True
         self.play_button.configure(state='disabled')
@@ -5415,7 +5517,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
         try:
             self.process = subprocess.Popen(run_command(), cwd=PORT_DIR, env=game_environment(self.app, self.ini),
                                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                            stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+                                            stderr=subprocess.STDOUT, **game_process_options())
         except OSError as error:
             self.append(_('Could not start: {}', 'Не удалось запустить: {}').format(error) + '\n')
             self.process = self.game_started = None
@@ -5679,7 +5781,10 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             self.collect()
         elif not path.exists():
             path.mkdir(parents=True, exist_ok=True)
-        os.startfile(str(path))
+        if WINDOWS:
+            os.startfile(str(path))
+        else:
+            subprocess.Popen(['xdg-open', str(path)])
 
     # ---- updates -------------------------------------------------------------------------------
     def check_update_now(self):
@@ -5689,6 +5794,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
     def check_update(self, manual=False):
         """Helper thread: asks GitHub for the newest release (and a beta for the next beta) and offers it. Asked by
         the button, it always answers: a broken reply (BadStatusLine) ended the thread without a word."""
+        if not WINDOWS:
+            return
         try:
             offer = update_to_offer()
         except Exception as failure:
@@ -5993,6 +6100,13 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
 
     def shortcut(self):
         """Bloodborne.lnk on the desktop."""
+        if not WINDOWS:
+            result = subprocess.run(['bash', str(PORT_DIR / 'launcher/install-desktop.sh')], capture_output=True, text=True)
+            if result.returncode:
+                self.messagebox.showerror('Bloodborne', result.stderr[:400])
+            else:
+                self.messagebox.showinfo('Bloodborne', _('Application-menu shortcut installed.'))
+            return
         if FROZEN:
             target, arguments, icon = sys.executable, '', f'{sys.executable},0'
         else:  # a source tree: the launcher script with the windowless Python
@@ -6019,6 +6133,15 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                                                      'first, which can take up to half a minute.'))
             return
         import bbport_steam
+        if WINDOWS:
+            steam_command = None
+        elif shutil.which('steam'):
+            steam_command = ['steam']
+        elif shutil.which('flatpak'):
+            steam_command = ['flatpak', 'run', 'com.valvesoftware.Steam']
+        else:
+            self.messagebox.showerror('Bloodborne', _('Steam was not found on this PC (or nobody has signed in to it yet).'))
+            return
         steam = bbport_steam.steam_folder()
         configs = bbport_steam.user_configs(steam) if steam else []
         if not configs:
@@ -6044,7 +6167,7 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                 self.messagebox.showerror('Bloodborne', problem)
             else:
                 if running:
-                    os.startfile('steam://open/games')
+                    webbrowser.open('steam://open/games')
                 if not closing:  # closed, Steam's library with the game is the answer
                     self.messagebox.showinfo('Bloodborne', _('Bloodborne is in your Steam library. It starts with '
                                                              'the settings saved in this launcher.'))
@@ -6055,7 +6178,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             nonlocal problem
             try:
                 if running:
-                    subprocess.Popen([str(steam / 'steam.exe'), '-shutdown'], creationflags=NO_WINDOW)
+                    subprocess.Popen(([str(steam / 'steam.exe')] if WINDOWS else steam_command) + ['-shutdown'],
+                                     creationflags=NO_WINDOW)
                     for _i in range(60):
                         time.sleep(0.5)
                         if not bbport_steam.steam_running():
@@ -6066,7 +6190,8 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
                     time.sleep(1)  # Steam writes its files as it exits
                 for config in configs:
                     bbport_steam.add_shortcut(config / 'shortcuts.vdf', 'Bloodborne', str(exe), str(PORT_DIR),
-                                              str(exe), options)
+                                              str(exe) if WINDOWS else str(PORT_DIR / 'launcher/bloodborne.png'),
+                                              options)
             except Exception as error:  # the button always answers
                 problem = _('Could not add the game to Steam: {}').format(error_text(error))
             finally:
@@ -6078,7 +6203,10 @@ class Launcher(bbport_setup.SetupMixin, bbport_help.HelpMixin, bbport_search.Sea
             if not self.messagebox.askyesno('Bloodborne', _('A game test is running. Stop it and close the launcher?')):
                 return
             self.bench.cancelled = True
-            subprocess.run(['taskkill', '/IM', 'bb-probe.exe', '/F'], capture_output=True, creationflags=NO_WINDOW)
+            if WINDOWS:
+                subprocess.run(['taskkill', '/IM', 'bb-probe.exe', '/F'], capture_output=True, creationflags=NO_WINDOW)
+            elif self.job:
+                self.job.terminate()
         try:
             self.collect()
         except Exception:  # never keep the window open over a settings problem
@@ -6106,6 +6234,10 @@ class GameJob:
     by the in-game restart (no longer descendants of the first process)."""
 
     def __init__(self, process):
+        self.pid = process.pid
+        self.handle = None
+        if not WINDOWS:
+            return
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateJobObjectW.restype = ctypes.c_void_p
         self.handle = kernel32.CreateJobObjectW(None, None)
@@ -6113,6 +6245,19 @@ class GameJob:
             kernel32.AssignProcessToJobObject(ctypes.c_void_p(self.handle), ctypes.c_void_p(int(process._handle)))
 
     def terminate(self):
+        if not WINDOWS:
+            try:
+                os.killpg(self.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return
+            def finish():
+                time.sleep(3)
+                try:
+                    os.killpg(self.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            threading.Thread(target=finish, daemon=True).start()
+            return
         if self.handle:
             ctypes.windll.kernel32.TerminateJobObject(ctypes.c_void_p(self.handle), 1)
 
@@ -6422,7 +6567,7 @@ def play_without_window(settings):
         status = (bbport_fsr412.method_status(graphics['fsr411_backend'], support)
             if graphics['upscaler'] == 'fsr412' else
             bbport_fsr411.method_status(PORT_DIR, DATA_DIR, graphics['fsr411_backend'],
-                support, fetch_fsr4vk, env))
+                support, fetch_fsr4vk, env, output_res=graphics['output_res'], preset=graphics['preset']))
         if not status['supported']:
             print('FSR 4.1: ' + _('FSR 4.1 unavailable') +
                   ' (' + status['reason'] + ': ' + status.get('detail', '') + ')')
@@ -6434,17 +6579,32 @@ def play_without_window(settings):
         log.writelines(note + '\n' for note in notes)
         process = subprocess.Popen(run_command(), cwd=PORT_DIR, env=game_environment(settings, graphics),
                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
-        for raw in iter(process.stdout.readline, b''):
-            text = raw.decode('utf-8', errors='replace')
-            log.write(text)
-            if 'Runtime: trophy ' in text:
-                tracker.observe(text)
-            try:
-                sys.stdout.write(text)
-            except (OSError, ValueError):
-                pass
-        code = process.wait()
+                                   stderr=subprocess.STDOUT, **game_process_options())
+        job = GameJob(process)
+        handlers = {}
+        if not WINDOWS and threading.current_thread() is threading.main_thread():
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                handlers[signum] = signal.signal(signum, lambda *_: job.terminate())
+        completed = False
+        try:
+            for raw in iter(process.stdout.readline, b''):
+                text = raw.decode('utf-8', errors='replace')
+                log.write(text)
+                if 'Runtime: trophy ' in text:
+                    tracker.observe(text)
+                try:
+                    sys.stdout.write(text)
+                except (OSError, ValueError):
+                    pass
+            code = process.wait()
+            completed = True
+        finally:
+            if not WINDOWS and not completed:
+                job.terminate()
+            for signum, handler in handlers.items():
+                signal.signal(signum, handler)
+            job.close()
+            placer.stop()
     if settings.get('thd_token') and sign_in_refused(settings):
         try:
             forget_sign_in()
@@ -6453,7 +6613,6 @@ def play_without_window(settings):
                           'asks to sign in\n')
         except OSError:
             pass
-    placer.stop()
     if placer.last and not settings.get('fullscreen'):
         remember_window(placer.last)
     return code
@@ -6748,7 +6907,7 @@ def main():
     if args[:1] == ['--after'] and len(args) >= 2:
         wait_for_exit(args[1])
         args = args[2:]
-    saved = load_settings()
+    saved = load_profile()
     settings = {**APP_DEFAULTS, **saved}
     settings.update(settled_online(settings, saved))  # also for --play: Steam and shortcuts skip the window
     LANG = settings.get('ui_language') or windows_language()

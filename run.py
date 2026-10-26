@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Windows counterpart of run.sh: prepares the game image and starts bb-probe.exe.
+"""Prepare the game image and start the native bb-probe on Windows or Linux.
 
 Same environment variables as run.sh (BB_GAME_DIR, BB_DATA_DIR, BB_FPS, BB_RENDER_RES,
 BB_LIVE_RES, BB_PATCHES, BB_MODS_*, BB_USER_DIR, ...). Extra arguments go to bb-probe.
@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -153,6 +155,37 @@ def fail(message):
 
 
 def wait_for(pid):
+    if pid <= 0:
+        raise ValueError('The previous process PID must be positive')
+    if os.name != 'nt':
+        # pidfds become readable on exit, including an unreaped launcher child.
+        if hasattr(os, 'pidfd_open'):
+            import select
+            try:
+                descriptor = os.pidfd_open(pid)
+            except ProcessLookupError:
+                return
+            except OSError:
+                pass
+            else:
+                try:
+                    select.select([descriptor], [], [], 30)
+                finally:
+                    os.close(descriptor)
+                return
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+                state = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
+                if state == 'Z':
+                    return
+            except ProcessLookupError:
+                return
+            except (OSError, IndexError):
+                pass
+            time.sleep(0.1)
+        return
     kernel32 = ctypes.windll.kernel32
     SYNCHRONIZE = 0x00100000
     handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
@@ -163,6 +196,14 @@ def wait_for(pid):
 
 def game_running():
     """Whether a game (bb-probe.exe) runs now; unknown counts as yes."""
+    if os.name != 'nt':
+        for process in Path('/proc').glob('[0-9]*'):
+            try:
+                if Path(os.readlink(process / 'exe')).name == 'bb-probe':
+                    return True
+            except OSError:
+                continue
+        return False
     try:
         result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq bb-probe.exe', '/FO', 'CSV', '/NH'],
                                 capture_output=True, timeout=15, creationflags=no_console())
@@ -200,17 +241,33 @@ def remove_stale_views(out, game):
 GAME_MUTEX = 'Local\\bbport-game'
 
 
+def game_lock_path():
+    """Linux's stand-in for GAME_MUTEX: a file this process holds an flock on (bbport_launcher_win.lock_path)."""
+    import tempfile
+    return Path(os.environ.get('XDG_RUNTIME_DIR') or tempfile.gettempdir()) / f'bbport-game-{os.getuid()}.lock'
+
+
 def hold_game_mutex(name=GAME_MUTEX):
     """Opens the game's named mutex for the rest of this process; False when another start has it."""
+    global _GAME_MUTEX_HANDLE
+    if os.name != 'nt':
+        import fcntl
+        _GAME_MUTEX_HANDLE = open(game_lock_path(), 'a')
+        try:
+            fcntl.flock(_GAME_MUTEX_HANDLE, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateMutexW.restype = ctypes.c_void_p
-    global _GAME_MUTEX_HANDLE
     _GAME_MUTEX_HANDLE = kernel.CreateMutexW(None, False, name)
     return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
 
 
 def no_console():
     """Started without a console (the launcher): console programs must not open their own."""
+    if os.name != 'nt':
+        return 0
     return 0 if ctypes.windll.kernel32.GetConsoleWindow() else subprocess.CREATE_NO_WINDOW
 
 
@@ -385,7 +442,18 @@ def low_vram_mb(env, caps):
 
 
 def physical_cores():
-    """CPU cores, not threads (GetLogicalProcessorInformation); os.cpu_count() when unknown."""
+    """Physical cores available to this process; logical CPU count when unknown."""
+    if os.name != 'nt':
+        try:
+            cpus = os.sched_getaffinity(0)
+            topology = Path('/sys/devices/system/cpu')
+            cores = {(int((topology / f'cpu{cpu}/topology/physical_package_id').read_text()),
+                      int((topology / f'cpu{cpu}/topology/core_id').read_text())) for cpu in cpus}
+            if cores:
+                return len(cores)
+        except (AttributeError, OSError, ValueError):
+            pass
+        return os.cpu_count() or 8
     try:
         from ctypes import wintypes
         size = wintypes.DWORD(0)
@@ -563,8 +631,17 @@ def writable_saves(user_dir):
     return cleared
 
 
+def terminate(signum, _frame):
+    # The launcher signals the whole group; unwind the runner to remove its private mod view.
+    raise SystemExit(128 + signum)
+
+
 def main():
     args = sys.argv[1:]
+    if args in (['--help'], ['-h']):
+        print('Usage: run.py [--after PID] [bb-probe arguments]\n'
+              'Set BB_GAME_DIR to the game folder; BB_DATA_DIR selects writable settings and saves.')
+        return 0
     restarted = len(args) >= 2 and args[0] == '--after'
     if restarted:
         wait_for(int(args[1]))
@@ -594,16 +671,22 @@ def main():
     if not env.get('BB_FSR411_DIR') and not (PORT / 'fsr4_411').is_dir() and (data / 'fsr4_411').is_dir():
         env['BB_FSR411_DIR'] = str(data / 'fsr4_411')
 
-    probe = Path(env['BB_PROBE']) if env.get('BB_PROBE') else find_executable('bb-probe.exe')
+    suffix = '.exe' if os.name == 'nt' else ''
+    probe_name = f'bb-probe{suffix}'
+    probe = Path(env['BB_PROBE']) if env.get('BB_PROBE') else find_executable(probe_name)
     if not probe or not probe.is_file():
         if getattr(sys, 'frozen', False):
             # A packaged port always has it: an antivirus took it away (the launcher's Help names the fix).
-            fail(f'bb-probe.exe is missing from {PORT / "bin"}: an antivirus has probably moved it to its '
+            fail(f'{probe_name} is missing from {PORT / "bin"}: an antivirus has probably moved it to its '
                  'quarantine. Restore it there and add the port folder to the antivirus\'s exclusions, or '
                  'extract the port\'s zip again.')
-        fail('bb-probe.exe not found: build it with build.sh (MSYS2 CLANG64) or use a packaged build.')
+        fail(f'{probe_name} not found: build it with build.sh or use a packaged build.')
+    probe = probe.resolve()
+    caps = probe.parent / f'bb-gpu-capabilities{suffix}'
+    if not caps.is_file():
+        caps = find_executable(f'bb-gpu-capabilities{suffix}') or caps
     # Development builds run from the MSYS2 tree: its CLANG64 DLLs (SDL3, FFmpeg, ...).
-    if not (probe.parent / 'SDL3.dll').is_file():
+    if os.name == 'nt' and not (probe.parent / 'SDL3.dll').is_file():
         clang64 = Path(env.get('MSYS2_ROOT', r'C:\msys64')) / 'clang64' / 'bin'
         if clang64.is_dir():
             env['PATH'] = f'{clang64}{os.pathsep}{env.get("PATH", "")}'
@@ -787,10 +870,12 @@ def main():
                 print(f'Output {scaled_output}: live resolution auto: startup patch (depth of field '
                       'blurs live scenes above 1080p; live_resolution=1 forces live changes)')
             if live == 'auto':
-                caps = probe.parent / 'bb-gpu-capabilities.exe'
-                result = subprocess.run([str(caps), '--live-resolution'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                        text=True, creationflags=no_console())
-                live = result.stdout.strip() if result.returncode == 0 else '0'
+                try:
+                    result = subprocess.run([str(caps), '--live-resolution'], stdin=subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, text=True, creationflags=no_console())
+                    live = result.stdout.strip() if result.returncode == 0 else '0'
+                except OSError:
+                    live = '0'
             live = '1' if live == '1' or not patched else '0'
             # Ultrawide and Sharp UI: the camera, HUD and UI viewport need the startup patch
             # (patches.py hud_canvas, ui_viewport).
@@ -812,7 +897,7 @@ def main():
             env.setdefault('BB_DMEM_MB', '9152')
             print(f'Output {scaled_output}: scene {scaled_render}, direct memory {env["BB_DMEM_MB"]} MiB '
                   '(live_resolution=1: live changes)')
-        vram = low_vram_mb(env, probe.parent / 'bb-gpu-capabilities.exe')
+        vram = low_vram_mb(env, caps)
         if vram:
             env.setdefault('BB_GC_BUDGET_MB', str(max(2048, vram - VRAM_RESERVE_MB)))
             notes = [f'texture budget {env["BB_GC_BUDGET_MB"]} MiB']
@@ -859,7 +944,8 @@ def main():
             online_overrides(env, user_dir)
         this = ['--run'] if getattr(sys, 'frozen', False) else [str(Path(__file__).resolve())]
         restart = [sys.executable, *this, '--after', str(os.getpid()), *args]
-        env['BB_RESTART_COMMAND'] = subprocess.list2cmdline(restart)
+        env['BB_RESTART_COMMAND'] = (subprocess.list2cmdline(restart) if os.name == 'nt'
+                                     else shlex.join(restart))
         command = [str(probe), str(out / 'boot-linked.bin'), '--content-profile', str(out / 'content.bin'),
                    '--patches', str(out / 'patches.bin'), '--app0', str(game),
                    '--user', str(saves_dir),
@@ -875,7 +961,17 @@ def main():
                 sys.path.insert(0, str(PORT / 'launcher'))
                 from bbport_exit_backup import run_with_backup
                 return run_with_backup(command, saves_dir, original_game, creationflags=no_console())
-            return subprocess.run(command, stdin=subprocess.DEVNULL, creationflags=no_console()).returncode
+            with subprocess.Popen(command, stdin=subprocess.DEVNULL, creationflags=no_console()) as process:
+                try:
+                    return process.wait()
+                except BaseException:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+                    raise
         finally:
             if game_over:
                 game_over.set()
@@ -890,6 +986,8 @@ def main():
 
 
 if __name__ == '__main__':
+    if os.name != 'nt':
+        signal.signal(signal.SIGTERM, terminate)
     try:
         sys.exit(main())
     except KeyboardInterrupt:
