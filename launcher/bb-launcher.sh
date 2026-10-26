@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Starts the Bloodborne launcher (GTK4). With Python, PyGObject, GTK 4 and libadwaita installed
-# it runs directly; otherwise through nix-shell (launcher/shell.nix).
+# Starts the shared Tk launcher; Nix supplies its dependencies when needed.
 here=$(cd -- "$(dirname -- "$0")" && pwd)
-if python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")' 2>/dev/null; then
+if python3 -c 'import tkinter, PIL.ImageTk' 2>/dev/null; then
     exec python3 "$here/bbport_launcher.py" "$@"
 fi
-exec nix-shell "$here/shell.nix" --run "python3 '$here/bbport_launcher.py'"
+if command -v nix-shell >/dev/null; then
+    printf -v command 'python3 %q ' "$here/bbport_launcher.py"
+    for argument in "$@"; do printf -v command '%s%q ' "$command" "$argument"; done
+    exec nix-shell "$here/shell.nix" --run "$command"
+fi
+echo 'Install Python Tk and Pillow (CachyOS/Arch: sudo pacman -S --needed tk python-pillow).' >&2
+exit 1

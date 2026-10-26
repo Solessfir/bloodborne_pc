@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT))
 import linux_start as start
 import run
-from patches import OFFLINE_ONLY, EFFECTS
 
 
 def clean_environ(**extra):
@@ -234,14 +233,6 @@ class LowVramTests(StepCase):
         lines = self.low(4096, output='2560x1440')
         self.assertNotIn('env BB_RENDER_RES=960x540', lines)
         self.assertIn('env BB_GC_BUDGET_MB=3496', lines)
-
-
-class FairPlayTests(unittest.TestCase):
-    def test_the_launchers_list_matches_patches_py(self):
-        sys.path.insert(0, str(ROOT / 'launcher'))
-        import bbport_linux_online as online
-        for key in online.OFFLINE_ONLY_EFFECTS:
-            self.assertIn(EFFECTS[key][1], OFFLINE_ONLY)
 
 
 class PackageTests(unittest.TestCase):

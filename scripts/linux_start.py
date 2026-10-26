@@ -30,7 +30,7 @@ run.no_console = lambda: 0  # a Windows flag for new processes
 
 # Set once the saves were copied: the in-game restart inherits it and does not copy them again.
 BACKED_UP = 'BB_SAVES_BACKED_UP'
-# Seamless co-op's saves from a Windows port: never changed here (bbport_linux_online.COOP_SAVES).
+# Seamless co-op's saves from a Windows port: never changed here (run.py COOP_SAVES).
 COOP_SAVES = run.COOP_SAVES
 
 

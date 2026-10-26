@@ -1,18 +1,26 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """ML-FG diagnostics; failed checks preserve the saved selection."""
 import json
+import os
 import subprocess
 from pathlib import Path
 
 REASONS = {'ready', 'windows11', 'rx9000', 'files', 'runtime', 'vulkan',
            'adapter', 'interop', 'dx12', 'provider', 'check'}
+WINDOWS = os.name == 'nt'
+
+
+def executable(port):
+    name = 'bb-fg401-capabilities.exe' if WINDOWS else 'bb-fg401-capabilities'
+    packaged = Path(port) / 'bin' / name
+    return packaged if packaged.is_file() else Path(port) / 'out' / name
 
 def query(port, env=None, version='4.0.1'):
     if version not in ('4.0.1', '4.0.2'):
         raise ValueError('unsupported ML-FG version')
-    exe = Path(port)/'bin/bb-fg401-capabilities.exe'
-    if not exe.is_file():
-        exe = Path(port)/'out/bb-fg401-capabilities.exe'
+    if not WINDOWS:
+        return dict(supported=False, reason='platform', detail=f'ML-FG {version} requires Windows 11.')
+    exe = executable(port)
     if not exe.is_file():
         return dict(supported=False, reason='files', detail='bb-fg401-capabilities.exe')
     try:
@@ -63,6 +71,7 @@ def message(status, translate, hdr=False, selected=False, version='4.0.1'):
         'interop': 'ML-FG sharing/queue support missing.',
         'dx12': 'ML-FG driver support missing: {}',
         'provider': 'ML-FG 4.0.1 provider unavailable.',
+        'platform': 'ML-FG requires Windows 11.',
     }.get(status.get('reason'), 'ML-FG check failed. Recheck support.')
     return translate(key).format(status.get('detail') or 'AMD runtime')
 

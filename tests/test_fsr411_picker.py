@@ -21,6 +21,16 @@ import bbport_fsr41 as family
 READY = dict(vendor_id=0x1002, **{m: dict(supported=True, reason='ready', detail='') for m in ('vk', 'dx12')})
 
 
+def setUpModule():
+    for module in (launcher, support):
+        fixture = patch.object(module, 'WINDOWS', True)
+        fixture.start()
+        unittest.addModuleCleanup(fixture.stop)
+    backends = patch.object(launcher, 'FSR411_BACKENDS', [('vk', ('Vulkan (fsr4vk)',)), ('dx12', ('AMD DX12',))])
+    backends.start()
+    unittest.addModuleCleanup(backends.stop)
+
+
 class PickerFixture:
     def setUp(self):
         import tkinter as tk
@@ -239,15 +249,15 @@ class ShortcutTests(unittest.TestCase):
     def test_invalid_saved_method_returns_to_launcher_without_popup_or_game(self):
         status = dict(supported=False, reason='download', detail='test.dll')
         with patch.object(launcher, 'attach_stdio'), patch.object(launcher, 'load_ini',
-                return_value=({'upscaler':'fsr411', 'fsr411_backend':'vk'}, [])), \
+                return_value=({**launcher.INI_DEFAULTS, 'upscaler':'fsr411', 'fsr411_backend':'vk'}, [])), \
              patch.object(support, 'query', return_value=READY), \
              patch.object(support, 'method_status', return_value=status), \
              patch.object(launcher, 'game_underway', return_value=False), \
              patch.object(launcher.subprocess, 'Popen') as popen, \
-             patch.object(launcher.ctypes.windll.user32, 'MessageBoxW') as popup, patch('builtins.print'):
+             patch.object(launcher.ctypes, 'windll', Mock(), create=True) as windows, patch('builtins.print'):
             self.assertIsNone(launcher.play_without_window(launcher.APP_DEFAULTS))
         popen.assert_not_called()
-        popup.assert_not_called()
+        windows.user32.MessageBoxW.assert_not_called()
 
     def test_shortcut_opens_graphics_when_saved_method_is_unavailable(self):
         import tkinter as tk

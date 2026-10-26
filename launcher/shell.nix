@@ -2,7 +2,6 @@
 { pkgs ? import <nixpkgs> {} }:
 pkgs.mkShell {
   packages = with pkgs; [
-    (python3.withPackages (ps: [ ps.pygobject3 ]))
-    gtk4 libadwaita gobject-introspection
+    (python3.withPackages (ps: [ ps.tkinter ps.pillow ]))
   ];
 }

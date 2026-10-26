@@ -364,18 +364,21 @@ bool WindowSDL::WantsMouseCapture() const {
 }
 
 void WindowSDL::UpdateMouseCapture() {
-    const bool wants = WantsMouseCapture();
+    const bool capture_cursor = window_focused && !BbOverlay::CapturesInput();
+    if (capture_cursor != SDL_GetWindowRelativeMouseMode(window)) {
+        if (!SDL_SetWindowRelativeMouseMode(window, capture_cursor)) {
+            LOG_ERROR(Frontend, "Failed to change mouse capture: {}", SDL_GetError());
+        } else if (!capture_cursor) {
+            SDL_ShowCursor();
+            cursor_hidden = false;
+        }
+    }
+    // Pointer confinement is independent of mapping mouse input to the controller or camera.
+    const bool wants = WantsMouseCapture() && SDL_GetWindowRelativeMouseMode(window);
     if (wants == mouse_captured_last) {
         return;
     }
     mouse_captured_last = wants;
-    SDL_SetWindowRelativeMouseMode(window, wants);
-    // Enabling relative mode hides the cursor by itself; disabling it does not document giving
-    // it back, so that side is made explicit here (SDL_ShowCursor is a no-op if already shown).
-    if (!wants) {
-        SDL_ShowCursor();
-        cursor_hidden = false;
-    }
     {
         // MOU-005/MOU-007: leaving capture drops whatever motion/buttons/wheel accumulated so
         // far -- a button still held when capture ends must never reach the pad as a press.

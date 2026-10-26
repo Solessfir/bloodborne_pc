@@ -1,7 +1,7 @@
 # Linux build
 
-The Linux version is the native `bb-probe` (ELF) with `run.sh` and the GTK4 launcher
-(`launcher/bbport_launcher.py`), packaged with Nix as an AppImage (Steam Deck and most desktops).
+The Linux version is the native `bb-probe` (ELF) with the same launcher as Windows
+(`launcher/bbport_launcher_win.py`), packaged with Nix as an AppImage (Steam Deck and most desktops).
 
 On a Linux PC with Nix:
 
@@ -10,12 +10,11 @@ On a Linux PC with Nix:
 
 `nix-build packaging` alone gives `result/bin/bbport` (launcher) and `result/bin/bbport-game` (the game with the
 saved settings). Data (saves, `bbport.ini`, generated files): `~/.local/share/bbport`. Launcher settings:
-`~/.config/bbport-launcher/settings.json`, the Linux launcher's own (not the Windows launcher's settings;
-readable by the user only, as it holds the SuperMedo account's password).
+`~/.config/bbport-launcher/settings.json`.
 
 ## Online on Linux
 
-The launcher's **Online** page: SuperMedo Server only (`launcher/bbport_linux_online.py`), with the
+The launcher's **Online** page is the Windows launcher's: SuperMedo Server, with the
 account (Sign in with Discord, an Online ID and password checked by the server, or a new account), UPnP, a
 connection test and the party box (party code, join, kick, leave; SuperMedo Server's `/party/v1`). Cheats,
 debug features and third-party patches stay off in online play (`patches.py` leaves them out); Play asks
@@ -24,8 +23,8 @@ start, as `run.py` does on Windows; `user/host_overrides.custom.json` is used as
 
 **SuperMedo Seamless co-op is Windows only.** BBSC is a Windows program: `bbsc-launch.exe` starts the
 Windows `bb-probe.exe` and injects `bbsc.dll` with `CreateRemoteThread`, and the DLL is built on `windows.h`,
-WinHTTP and Winsock (CLSAMG22/BBSC, `emulator/mod`). It cannot start the Linux game, so the Online page shows
-the choice as unavailable and has no Seamless difficulty or options. A user folder brought from Windows keeps
+WinHTTP and Winsock (CLSAMG22/BBSC, `emulator/mod`). It cannot start the Linux game, so the Online page has no
+Seamless co-op tab on Linux (`bbsc_available`). A user folder brought from Windows keeps
 Seamless co-op's saves in `user/seamless-coop`; the launcher warns when that folder is chosen as the saves
 folder (BBSC's goods there show as `?GoodsName?` without BBSC).
 

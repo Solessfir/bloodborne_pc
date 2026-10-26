@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """The monitors of this PC and the game's window on them.
 
+Linux reports monitor sizes through Hyprland or XRandR; game window placement remains with the compositor.
+
 The port opens its window at 1920 x 1080 in the middle of the main monitor (gpu/shim/window.cpp)
 and keeps nothing of where the player moved it or how big they made it. The launcher places the
 window instead, once it exists: on the chosen monitor, at the chosen size (the output resolution,
@@ -10,8 +12,11 @@ monitor. The game's in-game restart opens a new window; it is placed the same wa
 Every size here is in physical pixels: the code that measures monitors and moves the window runs
 per-monitor DPI aware, whatever the rest of the launcher is."""
 import ctypes
+import json
+import os
 import re
 import struct
+import subprocess
 import threading
 import time
 from ctypes import wintypes
@@ -20,6 +25,7 @@ MIN_SIZE, MAX_SIZE = (640, 360), (7680, 4320)
 SWP_NOZORDER, SWP_NOACTIVATE = 0x0004, 0x0010
 GWL_STYLE, GWL_EXSTYLE = -16, -20
 PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
+WINDOW_PLACEMENT_SUPPORTED = os.name == 'nt'
 
 
 def parse_size(text):
@@ -127,7 +133,9 @@ def monitor_names():
 
 
 def monitors():
-    """The monitors, main monitor first, then by Windows' number; [] where Windows cannot say."""
+    """Connected monitor sizes in pixels; Linux window placement remains compositor controlled."""
+    if os.name != 'nt':
+        return _linux_monitors()
     found = []
     try:
         user32 = ctypes.windll.user32
@@ -151,6 +159,55 @@ def monitors():
     return sorted(found, key=lambda m: (not m.primary, m.number))
 
 
+def _linux_monitors():
+    if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+        try:
+            result = subprocess.run(['hyprctl', '-j', 'monitors'], capture_output=True,
+                                    text=True, check=True, timeout=2)
+            found = []
+            for entry in json.loads(result.stdout):
+                if entry.get('disabled'):
+                    continue
+                width, height = int(entry['width']), int(entry['height'])
+                if int(entry.get('transform', 0)) % 2:
+                    width, height = height, width
+                if width <= 0 or height <= 0:
+                    continue
+                x, y = int(entry['x']), int(entry['y'])
+                scale = float(entry.get('scale', 1))
+                left, top, right, bottom = entry.get('reserved', [0, 0, 0, 0])
+                rect = (x, y, x + width, y + height)
+                work = (x + round(left * scale), y + round(top * scale),
+                        x + width - round(right * scale), y + height - round(bottom * scale))
+                item = Monitor(entry['name'], rect, work, not found, entry.get('description', ''))
+                item.scale = scale
+                found.append(item)
+            if found:
+                return found
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            pass
+    if not os.environ.get('DISPLAY'):
+        return []
+    try:
+        result = subprocess.run(['xrandr', '--query'], capture_output=True, text=True,
+                                check=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found = []
+    for line in result.stdout.splitlines():
+        match = re.match(r'^(\S+) connected (primary )?(\d+)x(\d+)([+-]\d+)([+-]\d+)\b', line)
+        if not match:
+            continue
+        device, primary, width, height, x, y = match.groups()
+        width, height, x, y = map(int, (width, height, x, y))
+        if width > 0 and height > 0:
+            bounds = (x, y, x + width, y + height)
+            found.append(Monitor(device, bounds, bounds, bool(primary)))
+    if found and not any(m.primary for m in found):
+        found[0].primary = True
+    return sorted(found, key=lambda m: (not m.primary, m.number))
+
+
 def monitor(device, available=None):
     """The chosen monitor ('' or one that is gone: the main one); None without any."""
     available = monitors() if available is None else available
@@ -168,6 +225,8 @@ def fit(size, room):
 # ---- the game's window -----------------------------------------------------------------------
 def game_windows():
     """The visible top-level windows of the running game (bb-probe.exe)."""
+    if not WINDOW_PLACEMENT_SUPPORTED:
+        return []
     import bbport_benchmark as bench
     return [hwnd for hwnd in (bench.game_window(pid) for pid in bench.game_pids()) if hwnd]
 
@@ -197,6 +256,8 @@ def frame_for(hwnd, client, dpi):
 
 
 def monitor_dpi(m):
+    if not WINDOW_PLACEMENT_SUPPORTED:
+        return round(96 * getattr(m, 'scale', 1))
     try:
         handle = ctypes.windll.user32.MonitorFromPoint(wintypes.POINT(m.rect[0] + 1, m.rect[1] + 1), 2)
         x, y = ctypes.c_uint(), ctypes.c_uint()
@@ -231,7 +292,8 @@ class Placer:
         self.stopped = threading.Event()
 
     def start(self):
-        threading.Thread(target=self.run, daemon=True).start()
+        if WINDOW_PLACEMENT_SUPPORTED:
+            threading.Thread(target=self.run, daemon=True).start()
         return self
 
     def stop(self):
@@ -246,6 +308,8 @@ class Placer:
                     pass
 
     def step(self):
+        if not WINDOW_PLACEMENT_SUPPORTED:
+            return
         for hwnd in self.find():
             rect = window_rect(hwnd)
             if hwnd not in self.placed:

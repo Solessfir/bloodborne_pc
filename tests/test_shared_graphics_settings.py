@@ -30,6 +30,9 @@ class SharedSettingsTests(unittest.TestCase):
         self.ini_path = patch.object(launcher, 'ini_path', return_value=self.ini)
         self.ini_path.start()
         self.addCleanup(self.ini_path.stop)
+        platform = patch.object(launcher, 'WINDOWS', True)
+        platform.start()
+        self.addCleanup(platform.stop)
 
     def test_migrate_legacy_profile_once_preserves_unrelated_lines(self):
         original = '# existing config\nupscaler=fsr411\nobject_motion=1\nsharpness=0.75\n'

@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """The controllers as the game sees them, and the controller test on the Controls page.
 
-The port's own SDL3 (bin/SDL3.dll) reads them: the same drivers and the same button mapping as the
+The bundled SDL3 (or Linux's installed library) reads them: the same drivers and button mapping as the
 game (gpu/shim/window.cpp, src/runtime_pad.c). Only the gamepad part of SDL is started, no window;
 the launcher reads while the Controls page is shown and stops when it is left or the game starts."""
 import ctypes
+import ctypes.util
+import os
 from pathlib import Path
 
 import bbport_theme as theme
@@ -99,7 +101,16 @@ class Pads:
 
 
 def sdl_path(port_dir):
-    """The port's SDL3.dll (bin/, or out/ in a build), None without one."""
+    """The bundled SDL3 library, or the system library on Linux; None when unavailable."""
+    if not Path(port_dir).is_dir():
+        return None
+    if os.name != 'nt':
+        for folder in ('bin', 'out'):
+            for name in ('libSDL3.so.0', 'libSDL3.so'):
+                path = Path(port_dir) / folder / name
+                if path.is_file():
+                    return path
+        return ctypes.util.find_library('SDL3')
     for folder in ('bin', 'out'):
         path = Path(port_dir) / folder / 'SDL3.dll'
         if path.is_file():
@@ -174,7 +185,7 @@ class PadMixin:
             dll = sdl_path(L.PORT_DIR)
             try:
                 if not dll:
-                    raise OSError(_('SDL3.dll is missing in the port\'s bin folder.'))
+                    raise OSError(_('SDL3 is not installed or bundled with the port.'))
                 self.pad_reader = Pads(dll)
             except OSError as error:
                 self.pad_status.configure(text=_('The controller test cannot start: {}').format(error), fg=theme.AMBER)

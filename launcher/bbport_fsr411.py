@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 
 _cache = {}
+WINDOWS = os.name == 'nt'
 DLL = {'vk': 'amd_fidelityfx_upscaler_vk.dll', 'dx12': 'amd_fidelityfx_upscaler_dx12.dll'}
 
 
@@ -20,8 +21,9 @@ def valid_status(status):
 
 
 def executable(port):
-    packaged = Path(port) / 'bin/bb-gpu-capabilities.exe'
-    return packaged if packaged.is_file() else Path(port) / 'out/bb-gpu-capabilities.exe'
+    name = 'bb-gpu-capabilities.exe' if WINDOWS else 'bb-gpu-capabilities'
+    packaged = Path(port) / 'bin' / name
+    return packaged if packaged.is_file() else Path(port) / 'out' / name
 
 
 def vulkan_folder(port, data_dir, env):
@@ -37,13 +39,18 @@ def environment(port, settings=None):
         if '=' in item:
             key, value = item.split('=', 1)
             env[key] = value
-    if not (Path(port) / 'bin/SDL3.dll').is_file():
+    if WINDOWS and not (Path(port) / 'bin/SDL3.dll').is_file():
         clang = Path(env.get('MSYS2_ROOT', r'C:\msys64')) / 'clang64/bin'
         env['PATH'] = str(clang) + os.pathsep + env.get('PATH', '')
     return env
 
 
 def query(port, env=None, refresh=False):
+    if not WINDOWS:
+        # The portable shaders are checked by the renderer; the native probe has no --fsr411 mode.
+        return {'vendor_id': None,
+                'vk': dict(supported=True, reason='runtime_check', detail=''),
+                'dx12': dict(supported=False, reason='platform', detail='AMD DX12 requires Windows.')}
     port = Path(port)
     env = environment(port) if env is None else env
     exe = executable(port)
@@ -82,12 +89,30 @@ def query(port, env=None, refresh=False):
 
 
 def default_backend(port, settings=None):
+    if not WINDOWS:
+        return 'vk'
     return 'dx12' if query(port, environment(port, settings)).get('vendor_id') == 0x1002 else 'vk'
 
 
-def method_status(port, data_dir, method, capabilities, fetch_fsr4vk, env=None):
+def method_status(port, data_dir, method, capabilities, fetch_fsr4vk, env=None,
+                  output_res='1920x1080', preset=1):
     """Recheck files after a download; never turn file absence into a GPU diagnosis."""
     env = os.environ if env is None else env
+    if not WINDOWS:
+        if method != 'vk':
+            return dict(supported=False, reason='platform', detail='AMD DX12 requires Windows.')
+        from bbport_assets import fsr411_problem
+        folder = Path(env['BB_FSR411_DIR']) if env.get('BB_FSR411_DIR') else (
+            Path(port) / 'fsr4_411' if (Path(port) / 'fsr4_411').is_dir() else Path(data_dir) / 'fsr4_411')
+        if not folder.is_absolute():
+            folder = Path(port) / folder
+        try:
+            problem = fsr411_problem(folder, output_res, int(preset))
+        except (OSError, ValueError):
+            problem = str(folder)
+        if problem:
+            return dict(supported=False, reason='portable_files', detail=f'{problem} ({folder})')
+        return dict(supported=True, reason='runtime_check', detail='')
     hardware = capabilities and capabilities[method]
     # These results are independent of the package. A download cannot supply GPU features.
     hardware_failure = hardware and hardware['reason'] in ('hardware', 'driver', 'adapter', 'interop')
@@ -159,6 +184,9 @@ def message(status, translate):
         'runtime': 'AMD runtime could not be loaded: {}',
         'provider': 'AMD FSR 4.1.1 is unavailable for this GPU/driver: {}',
         'disabled': 'Provider disabled: {}',
+        'platform': '{}',
+        'portable_files': 'Install the portable fsr4_411 shader files: {}',
+        'runtime_check': 'Portable shader files are available. GPU support is checked when the game starts.',
     }.get(status['reason'], 'Support check failed. Recheck support or update the driver.')
     text = translate(key).format(status.get('detail', ''))
     if status.get('files_problem'):
