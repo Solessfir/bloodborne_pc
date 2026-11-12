@@ -318,6 +318,13 @@ if os.name != 'nt':
         ['Update the graphics driver using your distribution\'s package manager.',
          'Restart the PC after installing it.',
          'Overclocked graphics card or memory: try the standard clocks.'])
+    TOPICS['gpu_unseen'] = (
+        'The game does not find your graphics card',
+        'Vulkan answers without a usable card. After a system update the running driver often no longer matches '
+        'its newly installed libraries (nvidia-smi says "Driver/library version mismatch").',
+        ['Restart the PC after a driver or kernel update.',
+         'Run vulkaninfo --summary: it should list your graphics card.',
+         'Still none: reinstall the graphics driver with your distribution\'s package manager.'])
     TOPICS.pop('smartscreen')
     TOPIC_ORDER.remove('smartscreen')
     TOPIC_ACTIONS.pop('page_file')
@@ -336,7 +343,8 @@ LOG_HINTS = [
     (r'is not the original file', 'program_files'),
     (r'ErrorOutOfDeviceMemory|Texture cache: memory pressure', 'vram'),
     (r'ErrorDeviceLost|device lost', 'driver'),
-    (r'Vulkan: the drivers it loads are limited by', 'gpu_unseen'),  # run.py: VK_ICD_FILENAMES and the like
+    (r'Vulkan: the drivers it loads are limited by', 'gpu_unseen'),
+    (r'Failed to enumerate physical devices', 'gpu_unseen'),  # run.py: VK_ICD_FILENAMES and the like
     (r"Server rejected this client|doesn't accept your shadPS4 build", 'shadnet_rejected'),
     (r"Input: mouse motion from Steam's Desktop Layout", 'steam_layout'),
     (r'Fault: .* at (?:amdvlk|amdxc|nvoglv|nvvk|nvwgf|igvk|igxe|igd)\w*\.dll', 'driver'),

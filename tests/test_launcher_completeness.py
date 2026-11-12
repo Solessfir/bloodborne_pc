@@ -47,6 +47,7 @@ class ClassInfo:
         self.name, self.paths = name, {path}
         self.defined, self.used = set(), {}  # used: name -> 'file:line'
         self.external_bases = False
+        self.local_bases = set()  # keys of base classes in the same file
         self.keeps_app = False  # self.app is the launcher
         self.app_used = {}
 
@@ -64,6 +65,8 @@ def collect():
             info = classes.setdefault(key, ClassInfo(key, path.name))
             info.paths.add(path.name)
             for base in node.bases:
+                if isinstance(base, ast.Name) and base.id in local and key != 'Launcher':
+                    info.local_bases.add(f'{path.name}:{base.id}')
                 if not (isinstance(base, ast.Name) and (base.id in local or base.id in LAUNCHER_GROUP)
                         or isinstance(base, ast.Attribute) and base.attr in LAUNCHER_GROUP):
                     if not (isinstance(base, ast.Name) and base.id == 'object'):
@@ -75,11 +78,14 @@ def collect():
                     info.defined.update(t.id for t in item.targets if isinstance(t, ast.Name))
                 elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
                     info.defined.add(item.target.id)
+            # `self.app = {...}` is a plain dict of settings, not the launcher.
+            app_dicts = {id(t) for sub in ast.walk(node) if isinstance(sub, ast.Assign)
+                         and isinstance(sub.value, ast.Dict) for t in sub.targets}
             for sub in ast.walk(node):
                 if isinstance(sub, ast.Attribute) and is_self(sub.value):
                     if isinstance(sub.ctx, (ast.Store, ast.Del)):
                         info.defined.add(sub.attr)
-                        if sub.attr == 'app' and key != 'Launcher':
+                        if sub.attr == 'app' and key != 'Launcher' and id(sub) not in app_dicts:
                             info.keeps_app = True
                     elif not sub.attr.startswith('__'):
                         info.used.setdefault(sub.attr, f'{path.name}:{sub.lineno}')
@@ -88,7 +94,25 @@ def collect():
                         app_set.add(sub.attr)
                     else:
                         info.app_used.setdefault(sub.attr, f'{path.name}:{sub.lineno}')
+    inherit(classes)
     return classes, app_set
+
+
+def inherit(classes):
+    """A class has what its base classes in the same file define, and their external bases."""
+    done = set()
+
+    def resolve(info):
+        if info.name in done:
+            return
+        done.add(info.name)
+        for base in info.local_bases:
+            if base in classes:
+                resolve(classes[base])
+                info.defined |= classes[base].defined
+                info.external_bases |= classes[base].external_bases
+    for info in list(classes.values()):
+        resolve(info)
 
 
 def missing_attributes():
@@ -124,6 +148,19 @@ class StaticTests(unittest.TestCase):
             saved, LAUNCHER = LAUNCHER, Path(folder)
             try:
                 self.assertEqual([p.split(' ')[0] for p in missing_attributes()], ['Launcher.side_note'])
+            finally:
+                LAUNCHER = saved
+
+    def test_a_subclass_has_what_its_base_defines(self):
+        """A page class reads helpers its base in the same file makes; a name neither makes is still found."""
+        source = 'class Launcher:\n    pass\nclass _Base:\n    def __init__(self):\n        self.body = 1\n    def card(self):\n        pass\n' \
+                 'class Page(_Base):\n    def build(self):\n        self.card(self.body, self.missing)\n'
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / 'bbport_fake.py').write_text(source, encoding='utf-8')
+            global LAUNCHER
+            saved, LAUNCHER = LAUNCHER, Path(folder)
+            try:
+                self.assertEqual([p.split(' ')[0] for p in missing_attributes()], ['bbport_fake.py:Page.missing'])
             finally:
                 LAUNCHER = saved
 

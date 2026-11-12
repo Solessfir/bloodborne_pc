@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-# Starts the shared Tk launcher; Nix supplies its dependencies when needed.
+# Starts the shared native launcher; --tk keeps the previous frontend available.
 here=$(cd -- "$(dirname -- "$0")" && pwd)
+if [[ ${1:-} == --qt ]]; then
+    shift
+    exec python3 "$here/bbport_launcher_qt.py" "$@"
+fi
+if [[ ${1:-} == --tk ]]; then
+    shift
+elif python3 -c 'import PySide6, tkinter, PIL.ImageQt' 2>/dev/null; then
+    exec python3 "$here/bbport_launcher_qt.py" "$@"
+fi
 if python3 -c 'import tkinter, PIL.ImageTk' 2>/dev/null; then
     exec python3 "$here/bbport_launcher.py" "$@"
 fi

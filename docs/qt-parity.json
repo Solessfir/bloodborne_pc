@@ -1,0 +1,1088 @@
+{
+  "pages": [
+    "play",
+    "picture",
+    "controls",
+    "online",
+    "saves",
+    "mods",
+    "language",
+    "trophies",
+    "help",
+    "graphics",
+    "game",
+    "gameplay",
+    "cheats",
+    "system",
+    "advanced",
+    "log"
+  ],
+  "settings": {
+    "user_dir": "app",
+    "goal": "app",
+    "play_with": "app",
+    "fullscreen": "app",
+    "online": "app",
+    "fps_mode": "app",
+    "upscaler": "ini",
+    "output_res": "ini",
+    "gpu_override": "app",
+    "fsr411_backend": "ini",
+    "preset": "ini",
+    "frame_cap": "app",
+    "effect_game_aa": "ini",
+    "effect_ssao": "ini",
+    "effect_dynamic_shadows": "ini",
+    "effect_ssr": "ini",
+    "model_lod": "ini",
+    "object_motion": "ini",
+    "sharpen": "ini",
+    "sharpness": "ini",
+    "frame_gen": "ini",
+    "auto_graphics": "app",
+    "exclusive_fullscreen": "app",
+    "game_monitor": "app",
+    "output_display": "app",
+    "hdr": "app",
+    "effect_chromatic_aberration": "ini",
+    "effect_dof": "ini",
+    "effect_motion_blur": "ini",
+    "show_fps": "ini",
+    "button_prompts": "ini",
+    "menu_key": "app",
+    "menu_pad": "app",
+    "online_pool": "app",
+    "online_npid": "app",
+    "online_password": "app",
+    "online_custom_servers": "app",
+    "supermedo_npid": "app",
+    "supermedo_pass": "app",
+    "party_key": "app",
+    "online_community": "app",
+    "online_server": "app",
+    "online_webapi": "app",
+    "online_upnp": "app",
+    "online_relay": "app",
+    "game_dir": "app",
+    "auto_backup": "app",
+    "exit_backup": "app",
+    "cache_dir": "app",
+    "mods_enabled": "app",
+    "mods_dir": "app",
+    "patches_dir": "app",
+    "ui_language": "app",
+    "translucent_window": "app",
+    "on_play": "app",
+    "reopen_after_game": "app",
+    "hud_position": "ini",
+    "sharp_ui": "ini",
+    "live_resolution": "ini",
+    "object_motion_cache": "ini",
+    "frames_ahead": "app",
+    "present_mode": "app",
+    "low_latency": "app",
+    "early_submit": "app",
+    "vrr": "app",
+    "async_pipelines": "app",
+    "show_frame_times": "ini",
+    "show_latency": "ini",
+    "show_vram": "ini",
+    "show_gpu": "ini",
+    "show_cpu": "ini",
+    "show_ram": "ini",
+    "show_fps_graph": "ini",
+    "counter_colors": "ini",
+    "frame_gen_multiplier": "ini",
+    "frame_gen_fit_display": "ini",
+    "dlc_dir": "app",
+    "language": "app",
+    "voice_language": "app",
+    "player_name": "app",
+    "skip_intro": "ini",
+    "mute_unfocused": "ini",
+    "tweak_no_rally": "ini",
+    "tweak_camera_distance": "ini",
+    "tweak_no_camera_rotation": "ini",
+    "tweak_easy_run": "ini",
+    "tweak_ragdoll": "ini",
+    "tweak_circle_confirm": "ini",
+    "quit_to_desktop": "ini",
+    "pc_menu": "ini",
+    "rebirth": "ini",
+    "steady_cloth": "ini",
+    "cheat_no_death": "ini",
+    "cheat_stealth": "ini",
+    "cheat_silent": "ini",
+    "cheat_rally_no_decay": "ini",
+    "cheat_enemy_control": "ini",
+    "debug_camera": "ini",
+    "debug_menu": "ini",
+    "windows_title_bar": "app",
+    "draw_pipe": "app",
+    "readbacks": "app",
+    "low_vram": "app",
+    "vram_warning": "app",
+    "frame_stats": "app",
+    "mangohud": "app",
+    "gpu_profile": "app",
+    "vk_validation": "app",
+    "extra_env": "app",
+    "setup_done": "app"
+  },
+  "entries": [
+    {
+      "key": "goal",
+      "title": "Your goal",
+      "hint": "Smooth, Balanced, Quiet",
+      "page": "play"
+    },
+    {
+      "key": "play_with",
+      "title": "You play with",
+      "hint": "Controller, Keyboard and mouse",
+      "page": "play"
+    },
+    {
+      "key": "goal",
+      "title": "Your goal",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "button:undo",
+      "title": "Undo",
+      "hint": "Made for your PC",
+      "page": "picture"
+    },
+    {
+      "key": "auto_graphics",
+      "title": "Adjust them automatically when the hardware changes",
+      "hint": "Show the settings one by one",
+      "page": "picture"
+    },
+    {
+      "key": "fullscreen",
+      "title": "Fullscreen",
+      "hint": "Recommended: the game gets the display to itself (smoother, and 4K downsampling works).",
+      "page": "picture"
+    },
+    {
+      "key": "exclusive_fullscreen",
+      "title": "Exclusive fullscreen",
+      "hint": "Fullscreen takes the display over instead of covering the desktop: frames can arrive more evenly, but switching to another window takes a moment. Only with Fullscreen on.",
+      "page": "picture"
+    },
+    {
+      "key": "game_monitor",
+      "title": "Monitor",
+      "hint": "Used for output resolution. Your compositor controls which monitor the game opens on.",
+      "page": "picture"
+    },
+    {
+      "key": "output_res",
+      "title": "Resolution",
+      "hint": "The size of the picture. Your goal picks it for this PC; change it here if you like.",
+      "page": "picture"
+    },
+    {
+      "key": "window_size",
+      "title": "Window size",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "hdr",
+      "title": "Allow HDR output",
+      "hint": "When HDR is enabled in your desktop session and the display supports it.",
+      "page": "picture"
+    },
+    {
+      "key": "effect_chromatic_aberration",
+      "title": "Chromatic aberration",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "effect_dof",
+      "title": "Depth of field",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "effect_motion_blur",
+      "title": "Motion blur",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "show_fps",
+      "title": "Show the FPS counter",
+      "hint": "",
+      "page": "picture"
+    },
+    {
+      "key": "play_with",
+      "title": "You play with",
+      "hint": "Keyboard and mouse turns the mouse camera on and uses the Dark Souls III layout (asked first if you changed keys yourself). Controller turns the mouse camera off, so the game leaves the pointer alone. Keys and controller buttons keep working either way.",
+      "page": "controls"
+    },
+    {
+      "key": "button_prompts",
+      "title": "Button prompts",
+      "hint": "The game's button icons: your keyboard and mouse keys while you play with them, the controller's (PlayStation, Xbox or Switch) while you use it.",
+      "page": "controls"
+    },
+    {
+      "key": "menu_key",
+      "title": "In-game menu key",
+      "hint": "Opens the settings menu during play. No key: the menu only opens with the controller, or not at all; the launcher has every setting either way. A key you move the menu off can be bound to the game.",
+      "page": "controls"
+    },
+    {
+      "key": "menu_pad",
+      "title": "In-game menu on the controller",
+      "hint": "Off if pressing both sticks or Select + Start opens it by accident.",
+      "page": "controls"
+    },
+    {
+      "key": "controller_test",
+      "title": "Controller test",
+      "hint": "Press the buttons: what lights up here reaches the game.",
+      "page": "controls"
+    },
+    {
+      "key": "button:reset_controller",
+      "title": "Reset controller buttons",
+      "hint": "",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:layout",
+      "title": "Layout",
+      "hint": "WASD, Space to dodge, left click / Shift + left click to attack, right click / Shift + right click (or Ctrl) for the off hand, E interact, R item, F vial, Q lock on, Tab or Esc menu, and the 1:1 mouse camera. Replaces the keyboard and mouse bindings; the controller keeps its own.",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:enabled",
+      "title": "Enable mouse look",
+      "hint": "",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:stick",
+      "title": "Mouse controls",
+      "hint": "",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:camera",
+      "title": "Camera",
+      "hint": "Direct turns the game's camera by exact angles: no stick acceleration or turn-speed cap. While locked on, moving the mouse switches target.",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:camera_sensitivity",
+      "title": "Sensitivity (direct)",
+      "hint": "How far the direct camera turns per mouse movement (1.00 = 900 counts per radian).",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:speed",
+      "title": "Sensitivity (stick)",
+      "hint": "How fast the camera turns for a given mouse movement in stick emulation.",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:speed_offset",
+      "title": "Minimum turn speed (stick)",
+      "hint": "A constant added on top of sensitivity; raises the floor for slow movements without affecting fast ones as much.",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:sensitivity_y",
+      "title": "Vertical sensitivity",
+      "hint": "Up and down as a multiple of left and right (1.00 = the same).",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:invert_x",
+      "title": "Invert horizontal",
+      "hint": "",
+      "page": "controls"
+    },
+    {
+      "key": "mouse:invert_y",
+      "title": "Invert vertical",
+      "hint": "",
+      "page": "controls"
+    },
+    {
+      "key": "online",
+      "title": "Play online",
+      "hint": "Off: the game stays offline, as before. Cheats, debug features and third-party patches run offline only.",
+      "page": "online"
+    },
+    {
+      "key": "online_pool",
+      "title": "Play with",
+      "hint": "SuperMedo Server (recommended): supermedo.com's own servers, with a free account made below.",
+      "page": "online"
+    },
+    {
+      "key": "online_npid",
+      "title": "Online ID (NPID)",
+      "hint": "Your account name on that server, not your email.",
+      "page": "online"
+    },
+    {
+      "key": "online_password",
+      "title": "Password",
+      "hint": "Saved on this PC with the other launcher settings.",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "Account",
+      "hint": "",
+      "page": "online"
+    },
+    {
+      "key": "button:signout",
+      "title": "Sign out",
+      "hint": "SuperMedo account",
+      "page": "online"
+    },
+    {
+      "key": "button:signin_supermedo",
+      "title": "Sign in with Discord",
+      "hint": "Discord makes your SuperMedo account the first time, named after your Discord name; nothing to remember. Sign in again on any PC.",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "Discord",
+      "hint": "Discord makes your SuperMedo account the first time, named after your Discord name; nothing to remember. Sign in again on any PC.",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "Online ID",
+      "hint": "",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "Password",
+      "hint": "An account made here, on another PC or before: its Online ID and password.",
+      "page": "online"
+    },
+    {
+      "key": "button:signin_password",
+      "title": "Online ID and password",
+      "hint": "Sign in",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "New Online ID",
+      "hint": "1 to 16 letters, numbers, _ or -. Other players see this name.",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "New password",
+      "hint": "",
+      "page": "online"
+    },
+    {
+      "key": "supermedo_npid",
+      "title": "Email address",
+      "hint": "Only to make the account.",
+      "page": "online"
+    },
+    {
+      "key": "button:create_account",
+      "title": "Create account",
+      "hint": "New SuperMedo account",
+      "page": "online"
+    },
+    {
+      "key": "party_key",
+      "title": "Your party",
+      "hint": "While you are in a party, your bells and summon signs find only your party's hunters, with no level limit. Leave the password in the game's network settings empty: the party brings you together.",
+      "page": "online"
+    },
+    {
+      "key": "party_key",
+      "title": "Party code",
+      "hint": "Send this code to your friends. A new code stops the old one; friends already in stay.",
+      "page": "online"
+    },
+    {
+      "key": "party_key",
+      "title": "Join a party",
+      "hint": "Paste the code a friend sent you (SM-XXXX-XXXX).",
+      "page": "online"
+    },
+    {
+      "key": "online_community",
+      "title": "Game server",
+      "hint": "game.supermedo.com by default. Only the name is needed; the game picks the ports.",
+      "page": "online"
+    },
+    {
+      "key": "online_server",
+      "title": "Server address",
+      "hint": "host:port from the person who runs the server (Seamless co-op: its own address).",
+      "page": "online"
+    },
+    {
+      "key": "online_webapi",
+      "title": "WebAPI address",
+      "hint": "Of the shadNet server, not the game server. Leave empty: the server address with port 31315 is used.",
+      "page": "online"
+    },
+    {
+      "key": "online_upnp",
+      "title": "UPnP (open a port on the router automatically)",
+      "hint": "Turn it off on Tailscale or another VPN.",
+      "page": "online"
+    },
+    {
+      "key": "online_relay",
+      "title": "Russia route (through a relay in Kazakhstan)",
+      "hint": "Only if your network in Russia cannot reach the SuperMedo server: the connection goes through a relay to the same server and players. Leave it off otherwise.",
+      "page": "online"
+    },
+    {
+      "key": "button:test_connection",
+      "title": "Test connection",
+      "hint": "Connection",
+      "page": "online"
+    },
+    {
+      "key": "characters",
+      "title": "Your characters",
+      "hint": "Saves",
+      "page": "saves"
+    },
+    {
+      "key": "button:import",
+      "title": "Import saves from other versions",
+      "hint": "From other versions",
+      "page": "saves"
+    },
+    {
+      "key": "auto_backup",
+      "title": "Back up automatically before every start",
+      "hint": "Backups",
+      "page": "saves"
+    },
+    {
+      "key": "exit_backup",
+      "title": "Back up after every game exit",
+      "hint": "Backups",
+      "page": "saves"
+    },
+    {
+      "key": "button:backup",
+      "title": "Back up now",
+      "hint": "Backups",
+      "page": "saves"
+    },
+    {
+      "key": "button:restore",
+      "title": "Restore a backup",
+      "hint": "Backups",
+      "page": "saves"
+    },
+    {
+      "key": "button:add_backup",
+      "title": "Add a backup file…",
+      "hint": "Backups",
+      "page": "saves"
+    },
+    {
+      "key": "user_dir",
+      "title": "Saves folder",
+      "hint": "Your characters, their backups and the trophies. Empty: {data_dir}/user.",
+      "page": "saves"
+    },
+    {
+      "key": "cache_dir",
+      "title": "Cache folder",
+      "hint": "Shaders, logs and temporary files of this installation. Empty: its user folder ({data_dir}/user), so every version and every PC keeps its own shaders, wherever the saves are.",
+      "page": "saves"
+    },
+    {
+      "key": "mods_enabled",
+      "title": "Load mods",
+      "hint": "Loose-file mods, each in its own folder (with dvdroot_ps4, or chr\\, parts\\ … directly).",
+      "page": "mods"
+    },
+    {
+      "key": "mods_dir",
+      "title": "Mods folder",
+      "hint": "Empty: {data_dir}/mods",
+      "page": "mods"
+    },
+    {
+      "key": "patches_dir",
+      "title": "Patches folder",
+      "hint": "shadPS4/GoldHEN XML patch files for version 1.09. Empty: {data_dir}/patches",
+      "page": "mods"
+    },
+    {
+      "key": "ui_language",
+      "title": "Launcher language",
+      "hint": "Applies when the launcher opens again.",
+      "page": "language"
+    },
+    {
+      "key": "translucent_window",
+      "title": "Slightly translucent window",
+      "hint": "A hint of what lies behind the launcher: a blurred title bar (Windows 11) and the window at 98.5 %. Off: fully opaque, easiest to read.",
+      "page": "language"
+    },
+    {
+      "key": "on_play",
+      "title": "When the game starts",
+      "hint": "Closed, it ends with the game; minimized, it waits on the task bar (or in the tray).",
+      "page": "language"
+    },
+    {
+      "key": "reopen_after_game",
+      "title": "Open the launcher again when the game closes",
+      "hint": "After a crash it always comes back, with the log.",
+      "page": "language"
+    },
+    {
+      "key": "button:shortcut",
+      "title": "Desktop shortcut",
+      "hint": "",
+      "page": "language"
+    },
+    {
+      "key": "button:steam",
+      "title": "Add to Steam",
+      "hint": "",
+      "page": "language"
+    },
+    {
+      "key": "button:trophies",
+      "title": "Bring achievements from another installation",
+      "hint": "From an older port folder, the drive of your old PC or shadPS4: added to yours, none removed.",
+      "page": "trophies"
+    },
+    {
+      "key": "button:game_files",
+      "title": "Check the game files",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:shader_cache",
+      "title": "Clear the shader cache",
+      "hint": "For a black screen, or a broken picture after a driver update. The next start stutters for a few minutes.",
+      "page": "help"
+    },
+    {
+      "key": "button:updates",
+      "title": "Check for updates",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:versions",
+      "title": "Other versions…",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:news",
+      "title": "What's new",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:report",
+      "title": "Save a report",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:copy_summary",
+      "title": "Copy a summary",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:forum",
+      "title": "Open the forum",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:show_log",
+      "title": "Show the log",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "button:discord",
+      "title": "Open the Discord",
+      "hint": "",
+      "page": "help"
+    },
+    {
+      "key": "upscaler",
+      "title": "Upscaler",
+      "hint": "Temporal upscaling with the game's own motion vectors. FSR 4 needs its files (below) and a GPU with INT8 dot products; otherwise the game falls back to FSR 3.1 by itself.",
+      "page": "graphics"
+    },
+    {
+      "key": "fsr411_backend",
+      "title": "FSR 4.1 Settings",
+      "hint": "FSR 4.1.1 FSR 4.1.2 Vulkan DX12 fsr4vk",
+      "page": "graphics"
+    },
+    {
+      "key": "preset",
+      "title": "Quality preset",
+      "hint": "Render scale per axis: Quality renders at 1/1.5 of the output size.",
+      "page": "graphics"
+    },
+    {
+      "key": "output_res",
+      "title": "Output resolution",
+      "hint": "What the upscaler produces; the HUD is drawn at this size too.",
+      "page": "graphics"
+    },
+    {
+      "key": "hud_position",
+      "title": "HUD position (ultrawide)",
+      "hint": "21:9 outputs: health, items and Blood Echoes at the screen edges, or in the centred 16:9 area as on a 16:9 screen.",
+      "page": "graphics"
+    },
+    {
+      "key": "sharp_ui",
+      "title": "Sharp UI",
+      "hint": "Menus, HUD and text drawn at the output resolution instead of 1080p stretched up: much sharper at 1440p and 4K. From the next start, with live resolution changes off; not on ultrawide screens yet. An idea from Awaken's Lantern Engine.",
+      "page": "graphics"
+    },
+    {
+      "key": "live_resolution",
+      "title": "Live resolution changes",
+      "hint": "Off: outputs other than 1080p are set by a patch at start (fastest; changing them in the game restarts it). On: change output and preset in the game without a restart, at a cost.",
+      "page": "graphics"
+    },
+    {
+      "key": "sharpen",
+      "title": "Sharpening (RCAS)",
+      "hint": "Off with FSR 4: it sharpens by itself, and sharpening on top of it brings flaws along edges.",
+      "page": "graphics"
+    },
+    {
+      "key": "sharpness",
+      "title": "Sharpness",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "object_motion",
+      "title": "Object motion vectors",
+      "hint": "Less ghosting on characters, cloth and weapons; costs about 5–10% FPS.",
+      "page": "graphics"
+    },
+    {
+      "key": "object_motion_cache",
+      "title": "Motion-vector cache (experimental)",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "effect_ssao",
+      "title": "Ambient occlusion (SSAO)",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "effect_game_aa",
+      "title": "The game's own anti-aliasing",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "effect_dynamic_shadows",
+      "title": "Shadows of dynamic lights",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "effect_ssr",
+      "title": "Screen-space reflections (not in the original)",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "model_lod",
+      "title": "Model detail (LOD)",
+      "hint": "A game patch (game version 1.09).",
+      "page": "graphics"
+    },
+    {
+      "key": "fps_mode",
+      "title": "Frame rate",
+      "hint": "Community patches for game version 1.09. Unlocked makes the game use the real frame time. Other game versions always run at 30 FPS (the patches would corrupt them).",
+      "page": "graphics"
+    },
+    {
+      "key": "frame_cap",
+      "title": "Frame cap (unlocked mode)",
+      "hint": "Above about 120 FPS the game's movement timing breaks (running and rolling get slower, physics and animations can glitch): higher caps are at your own risk.",
+      "page": "graphics"
+    },
+    {
+      "key": "frames_ahead",
+      "title": "Frames ahead of the GPU",
+      "hint": "1 keeps frame pacing even; more can raise FPS when the graphics card is the limit.",
+      "page": "graphics"
+    },
+    {
+      "key": "present_mode",
+      "title": "Presentation",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "low_latency",
+      "title": "Low latency (Reflex / Anti-Lag 2)",
+      "hint": "Less input lag: the game starts each frame just in time instead of queuing frames for the display. NVIDIA Reflex on GeForce, AMD Anti-Lag 2 on Radeon (current drivers); other GPUs ignore it. Boost keeps the GPU clocks up. Auto: On + Boost on NVIDIA, off on other GPUs.",
+      "page": "graphics"
+    },
+    {
+      "key": "early_submit",
+      "title": "Send frames to the GPU in parts",
+      "hint": "The graphics card starts drawing a frame while the rest of it is still being prepared, so it is finished about 2 ms sooner. Uses a little more CPU. New: turn it off if you see flickering or missing objects.",
+      "page": "graphics"
+    },
+    {
+      "key": "vrr",
+      "title": "Variable refresh rate (VRR)",
+      "hint": "For a G-Sync or FreeSync display: the display follows the frames of the game, without tearing and without the lag of V-Sync. Uses V-Sync (Presentation is ignored) and keeps the frame rate a little below the refresh rate (117 FPS at 120 Hz, at most 120). Turn on G-Sync/FreeSync in the NVIDIA/AMD control panel; fullscreen works best.",
+      "page": "graphics"
+    },
+    {
+      "key": "async_pipelines",
+      "title": "New shaders while playing",
+      "hint": "In the background: a place seen for the first time does not stutter while its shaders are compiled; things drawn with them appear a moment later instead. Each is compiled once and kept.",
+      "page": "graphics"
+    },
+    {
+      "key": "show_fps",
+      "title": "FPS",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_frame_times",
+      "title": "Frame time",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_latency",
+      "title": "Render latency",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_vram",
+      "title": "Video memory (VRAM)",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_gpu",
+      "title": "GPU usage",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_cpu",
+      "title": "CPU usage",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_ram",
+      "title": "RAM usage",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "show_fps_graph",
+      "title": "Frame time graph",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "counter_colors",
+      "title": "Value colours",
+      "hint": "Colour-coded shows at a glance how each value stands; plain keeps the counter quiet.",
+      "page": "graphics"
+    },
+    {
+      "key": "frame_gen",
+      "title": "Frame generation",
+      "hint": "Frames made between two of the game's: 60 FPS on screen becomes 120. Needs a display with that refresh rate (120 Hz or more at 60 FPS); it pauses when the display cannot show the extra frames. Adds a little input latency. Menus and movies are not generated. DLSS needs a GeForce RTX 40 or newer, otherwise FSR 3.1 is used.",
+      "page": "graphics"
+    },
+    {
+      "key": "frame_gen_multiplier",
+      "title": "Multiplier",
+      "hint": "FSR 3.1 makes one frame (2×); DLSS on a GeForce RTX 50 up to three (4×).",
+      "page": "graphics"
+    },
+    {
+      "key": "frame_gen_fit_display",
+      "title": "Fit to display refresh",
+      "hint": "On: no more frames than the display shows (an uncapped game gets fewer generated frames, and the GPU does less). Off: the multiplier as chosen.",
+      "page": "graphics"
+    },
+    {
+      "key": "button:fsr4",
+      "title": "Download FSR 4 assets",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "button:fsr4vk",
+      "title": "Download fsr4vk",
+      "hint": "",
+      "page": "graphics"
+    },
+    {
+      "key": "game_dir",
+      "title": "Game folder",
+      "hint": "Your own game files of CUSA03173 (eboot.bin, sce_module, sce_sys, dvdroot_ps4); version 1.09 for the community patches.",
+      "page": "game"
+    },
+    {
+      "key": "dlc_dir",
+      "title": "DLC folder",
+      "hint": "Your add-ons, one folder each named like SPEXPANSIONDLC03 (The Old Hunters). Only needed with the base game alone; the Game of the Year edition (CUSA03173) has it.",
+      "page": "game"
+    },
+    {
+      "key": "language",
+      "title": "Text language",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "voice_language",
+      "title": "Voice language",
+      "hint": "As in the game uses the original voice setting; other choices use available tracks.",
+      "page": "gameplay"
+    },
+    {
+      "key": "player_name",
+      "title": "Player name",
+      "hint": "Where the game shows the PSN name; empty: the default.",
+      "page": "gameplay"
+    },
+    {
+      "key": "skip_intro",
+      "title": "Skip the intro logos and movie",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "mute_unfocused",
+      "title": "Mute when the game is in the background",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_no_rally",
+      "title": "No Rally (hits do not give health back)",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_camera_distance",
+      "title": "Camera further from the character",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_no_camera_rotation",
+      "title": "No camera auto-rotation while moving",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_easy_run",
+      "title": "Run with less stick tilt (about 70%)",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_ragdoll",
+      "title": "Dark Souls-style ragdoll physics (corpses fly further)",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "tweak_circle_confirm",
+      "title": "Japanese/Asian buttons: Circle confirms and interacts, Cross dodges",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "quit_to_desktop",
+      "title": "Quit to Desktop in the title menu and in the System menu",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "pc_menu",
+      "title": "PC Settings in the System menu: graphics, frame rate, effects and camera in the game",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "rebirth",
+      "title": "Rebirth at the Doll: back to your origin's attributes for 5 Insight, levels regained free",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "steady_cloth",
+      "title": "Cloth as on PS4 at higher frame rates: capes and coats hang and move as at 30 FPS",
+      "hint": "",
+      "page": "gameplay"
+    },
+    {
+      "key": "cheat_no_death",
+      "title": "Never die (health stops at 1 HP)",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "cheat_stealth",
+      "title": "Enemies do not see you (unless attacked)",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "cheat_silent",
+      "title": "Enemies do not hear you",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "cheat_rally_no_decay",
+      "title": "Rally never fades",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "cheat_enemy_control",
+      "title": "Control the targeted enemy (R3; L3 to go back; not with the free camera)",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "debug_camera",
+      "title": "Free camera (hold Cross + L3; keyboard Space + Z)",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "debug_menu",
+      "title": "Game debug menu (left touchpad / Tab; needs the debug fonts)",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "button:respec",
+      "title": "Respec a character…",
+      "hint": "",
+      "page": "cheats"
+    },
+    {
+      "key": "gpu_override",
+      "title": "Wrong graphics card?",
+      "hint": "Detected automatically",
+      "page": "system"
+    },
+    {
+      "key": "button:port_folder",
+      "title": "Port folder",
+      "hint": "",
+      "page": "advanced"
+    },
+    {
+      "key": "draw_pipe",
+      "title": "Two-stage GPU pipeline",
+      "hint": "20–30% faster; switch it off if the game is unstable.",
+      "page": "advanced"
+    },
+    {
+      "key": "readbacks",
+      "title": "GPU readbacks",
+      "hint": "How exactly data the GPU writes is copied back for the game.",
+      "page": "advanced"
+    },
+    {
+      "key": "low_vram",
+      "title": "Low-VRAM profile",
+      "hint": "A larger texture budget and, at 1080p with an upscaler, a smaller scene from the start (preset changes then need a restart).",
+      "page": "advanced"
+    },
+    {
+      "key": "vram_warning",
+      "title": "Warn when video memory runs low",
+      "hint": "Off: no \"Video memory is running low\" banner in the game. Memory is freed as before; the log still says when it ran short.",
+      "page": "advanced"
+    },
+    {
+      "key": "frame_stats",
+      "title": "Frame statistics in the log (every 5 s)",
+      "hint": "",
+      "page": "advanced"
+    },
+    {
+      "key": "mangohud",
+      "title": "MangoHud",
+      "hint": "Show the MangoHud performance overlay when installed.",
+      "page": "advanced"
+    },
+    {
+      "key": "gpu_profile",
+      "title": "GPU time per pass in the log",
+      "hint": "",
+      "page": "advanced"
+    },
+    {
+      "key": "vk_validation",
+      "title": "Vulkan validation layers (needs the Vulkan SDK; much slower)",
+      "hint": "",
+      "page": "advanced"
+    },
+    {
+      "key": "extra_env",
+      "title": "Extra variables",
+      "hint": "NAME=value pairs separated by spaces (README lists them).",
+      "page": "advanced"
+    },
+    {
+      "key": "button:benchmark",
+      "title": "Benchmark for bug reports…",
+      "hint": "A fixed route in Cathedral Ward for testers: one zip to send.",
+      "page": "advanced"
+    }
+  ]
+}

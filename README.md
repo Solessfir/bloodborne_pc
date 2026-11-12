@@ -163,6 +163,16 @@ Windows-only DLSS frame generation, ML-FG, DX12 and automated benchmarks are una
 Window placement belongs to the Linux compositor. The Linux launcher never installs Windows
 release packages; Linux builds are updated from source.
 
+The Linux launcher uses Qt when PySide6 is installed (`sudo pacman -S --needed pyside6` on
+CachyOS/Arch), selecting native Wayland in a Wayland session. All 16 pages share the original
+profile, game runner and services, including input bindings, accounts, saves, mods, achievements,
+hardware recommendations and setup. The original fonts, artwork and palette are reused.
+`bash launcher/bb-launcher.sh --tk` selects the previous Tk frontend; `--qt` explicitly selects Qt.
+Without PySide6 the wrapper falls back to Tk. Keep Tk/Pillow installed: the shared backend still
+imports them. No game data or saves need converting. `--play` continues to start the game directly
+with the saved settings. `docs/qt-parity.json` records the reference controls checked by the Qt tests;
+`python tools/audit_launcher_settings.py` regenerates the reference inventory without using a user profile.
+
 Linux: `bash build.sh`. Optional native DLSS Super Resolution and DLAA need an NVIDIA RTX GPU
 and a checkout of the [NVIDIA DLSS SDK](https://github.com/NVIDIA/DLSS):
 
